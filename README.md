@@ -61,9 +61,12 @@ sweteam brings that same discipline to AI coding agents:
        │
        ▼
  ┌───────────┐    A separate agent reviews each task's diff
- │ Reviewer  │    against its acceptance criteria. Failures
- │  (Senior) │    get sent back for fixes automatically —
- └─────┬─────┘    the same code review loop your team runs.
+ │ Reviewer  │    against its acceptance criteria. If the
+ │  (Senior) │    review fails, the coder automatically
+ └─────┬─────┘    retries — this loop repeats until the
+       │          reviewer is satisfied or the max cycle
+       │          limit is reached, just like a real senior
+       │          engineer blocking a PR until it's right.
        │
        ▼
  ┌───────────┐    Approved tasks are merged, the branch is
@@ -369,24 +372,24 @@ sweteam list --repo myrepo        # Filter by repo name
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                      sweteam CLI                          │
+│                       sweteam CLI                        │
 │                                                          │
-│  ┌──────────┐  ┌──────────────┐  ┌────────────────────┐ │
-│  │ Session  │  │   Planner    │  │   Orchestrator     │ │
-│  │ Manager  │  │  (chat mode) │  │   (autonomous)     │ │
-│  └──────────┘  └──────────────┘  └────────────────────┘ │
+│  ┌──────────┐  ┌──────────────┐  ┌────────────────────┐  │
+│  │ Session  │  │   Planner    │  │  Orchestrator      │  │
+│  │ Manager  │  │  (chat mode) │  │  (autonomous)      │  │
+│  └──────────┘  └──────────────┘  └────────────────────┘  │
 │                                                          │
-│  ┌──────────────────────────────────────────────────────┐ │
-│  │              Agent Adapter Layer                     │ │
-│  │   ┌────────────┐ ┌──────────┐ ┌───────────────────┐ │ │
-│  │   │ Claude Code│ │ Codex CLI│ │ OpenCode / Custom │ │ │
-│  │   └────────────┘ └──────────┘ └───────────────────┘ │ │
-│  └──────────────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │          Agent Adapter Layer                       │  │
+│  │ ┌────────────┐ ┌──────────┐ ┌────────────────────┐ │  │
+│  │ │ Claude Code│ │ Codex CLI│ │ OpenCode / Custom  │ │  │
+│  │ └────────────┘ └──────────┘ └────────────────────┘ │  │
+│  └────────────────────────────────────────────────────┘  │
 │                                                          │
-│  ┌────────────────────┐  ┌─────────────────────────────┐ │
-│  │  SQLite + Drizzle  │  │  git CLI + gh CLI (native)  │ │
-│  │  (session store)   │  │  (branches, PRs, commits)   │ │
-│  └────────────────────┘  └─────────────────────────────┘ │
+│  ┌──────────────────────┐  ┌──────────────────────────┐  │
+│  │  SQLite + Drizzle    │  │  git + gh CLI (native)   │  │
+│  │  (session store)     │  │  (branches, PRs, commits)│  │
+│  └──────────────────────┘  └──────────────────────────┘  │
 └──────────────────────────────────────────────────────────┘
 ```
 
