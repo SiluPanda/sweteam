@@ -8,6 +8,9 @@ vi.mock("../git/git.js", () => ({
   resolveRepo: vi.fn((input: string) => `owner/${input}`),
   cloneOrLocateRepo: vi.fn(() => "/tmp/fake-repo"),
   createBranch: vi.fn(),
+  isGitRepo: vi.fn(() => true),
+  getRepoRoot: vi.fn(() => "/tmp/fake-repo"),
+  repoFromRemote: vi.fn(() => "owner/fake-repo"),
 }));
 
 vi.mock("../config/loader.js", () => ({
@@ -42,18 +45,17 @@ describe("commands/create", () => {
     tempDirs.length = 0;
   });
 
-  it("should create a session and log info", async () => {
-    await handleCreate("myrepo", "Add dark theme");
+  it("should create a session with explicit repo", async () => {
+    await handleCreate("myrepo");
 
     const sessions = listSessions();
     expect(sessions.length).toBe(1);
     expect(sessions[0].repo).toBe("owner/myrepo");
-    expect(sessions[0].goal).toBe("Add dark theme");
     expect(sessions[0].status).toBe("planning");
   });
 
   it("should print session ID to console", async () => {
-    await handleCreate("myrepo", "Build feature");
+    await handleCreate("myrepo");
 
     const calls = consoleSpy.mock.calls.flat().join("\n");
     expect(calls).toContain("Session created");
@@ -62,10 +64,11 @@ describe("commands/create", () => {
     expect(calls).toContain("Branch:");
   });
 
-  it("should create session with correct repo", async () => {
-    await handleCreate("testrepo", "Fix bugs");
+  it("should create session using cwd when no repo given", async () => {
+    await handleCreate();
 
     const sessions = listSessions();
-    expect(sessions[0].repo).toBe("owner/testrepo");
+    expect(sessions.length).toBe(1);
+    expect(sessions[0].repo).toBe("owner/fake-repo");
   });
 });

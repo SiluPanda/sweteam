@@ -80,8 +80,7 @@ export async function runChatLoop(
       switch (command.type) {
         case "build":
           await callbacks.onBuild();
-          rl.close();
-          return;
+          break;
 
         case "stop":
           await callbacks.onStop();
@@ -134,7 +133,6 @@ export async function runChatLoop(
           addMessage(sessionId, "user", command.text, { phase: "planning" });
           const response = await callbacks.onMessage(command.text);
           addMessage(sessionId, "agent", response, { phase: "planning" });
-          console.log(`\n[agent] ${response}\n`);
           break;
       }
 

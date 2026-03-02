@@ -84,6 +84,7 @@ export async function runTask(
   task: TaskRecord,
   sessionBranch: string,
   repoPath: string,
+  onOutput?: (chunk: string) => void,
 ): Promise<{ success: boolean; output: string; diff: string }> {
   const config = loadConfig();
   const db = getDb();
@@ -115,6 +116,7 @@ export async function runTask(
       prompt,
       cwd: repoPath,
       timeout: 300000,
+      onOutput,
     });
 
     // Capture diff

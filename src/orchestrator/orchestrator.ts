@@ -7,6 +7,12 @@ import { reviewAndMerge } from "./reviewer.js";
 import { addMessage } from "../session/manager.js";
 import type { ParsedTask } from "../planner/plan-parser.js";
 
+export interface OrchestratorCallbacks {
+  onAgentStart?: (taskId: string, taskTitle: string, role: string) => void;
+  onAgentOutput?: (taskId: string, role: string, chunk: string) => void;
+  onAgentEnd?: (taskId: string, role: string, success: boolean) => void;
+}
+
 export interface OrchestratorResult {
   completed: string[];
   failed: string[];
@@ -108,7 +114,14 @@ export async function runOrchestrator(
   sessionId: string,
   repoPath: string,
   sessionBranch: string,
+  callbacks?: OrchestratorCallbacks | ((chunk: string) => void),
 ): Promise<OrchestratorResult> {
+  // Support legacy single-function signature
+  const cb: OrchestratorCallbacks =
+    typeof callbacks === "function"
+      ? { onAgentOutput: (_taskId, _role, chunk) => callbacks(chunk) }
+      : callbacks ?? {};
+
   const config = loadConfig();
   const completed: string[] = [];
   const failed: string[] = [];
@@ -150,10 +163,16 @@ export async function runOrchestrator(
       }
     }
 
-    // Run the task
+    // Run the task — Coder phase
     addMessage(sessionId, "system", `Starting task ${task.id}: ${task.title}`);
 
-    const result = await runTask(task, sessionBranch, repoPath);
+    cb.onAgentStart?.(task.id, task.title, "Coder");
+    const coderOutput = cb.onAgentOutput
+      ? (chunk: string) => cb.onAgentOutput!(task.id, "Coder", chunk)
+      : undefined;
+
+    const result = await runTask(task, sessionBranch, repoPath, coderOutput);
+    cb.onAgentEnd?.(task.id, "Coder", result.success);
 
     if (!result.success) {
       failed.push(task.id);
@@ -167,17 +186,24 @@ export async function runOrchestrator(
       continue;
     }
 
-    // Review and merge
+    // Review and merge — Reviewer phase
     // Reload task from DB (it was updated by runTask)
     const updatedTasks = getTasksForSession(sessionId);
     const updatedTask = updatedTasks.find((t) => t.id === task.id)!;
+
+    cb.onAgentStart?.(task.id, task.title, "Reviewer");
+    const reviewerOutput = cb.onAgentOutput
+      ? (chunk: string) => cb.onAgentOutput!(task.id, "Reviewer", chunk)
+      : undefined;
 
     const reviewResult = await reviewAndMerge(
       updatedTask,
       sessionBranch,
       repoPath,
       config.execution.max_review_cycles,
+      reviewerOutput,
     );
+    cb.onAgentEnd?.(task.id, "Reviewer", reviewResult.merged);
 
     if (reviewResult.merged) {
       completedIds.add(task.id);

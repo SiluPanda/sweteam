@@ -8,8 +8,10 @@ import {
   insertTasksFromPlan,
   getTasksForSession,
   runOrchestrator,
+  type OrchestratorCallbacks,
 } from "./orchestrator.js";
 import { pushBranch, createPR } from "../git/git.js";
+import { AgentPanel } from "../ui/agent-panel.js";
 
 export function generatePrBody(
   goal: string,
@@ -113,11 +115,9 @@ export async function handleBuild(
   const plan = parsePlan(planOutput);
 
   if (plan.tasks.length === 0) {
-    addMessage(
-      sessionId,
-      "system",
-      "Could not parse tasks from the plan. Please refine the plan and try @build again.",
-    );
+    const msg = "Could not parse tasks from the plan. Please refine the plan and try @build again.";
+    addMessage(sessionId, "system", msg);
+    console.log(msg);
     return;
   }
 
@@ -142,12 +142,37 @@ export async function handleBuild(
     `Plan finalized with ${plan.tasks.length} tasks. Starting build...`,
   );
 
+  // Print task list so the user sees what will be built
+  console.log(`Found ${plan.tasks.length} tasks:\n`);
+  for (const t of plan.tasks) {
+    const deps = t.dependsOn.length > 0 ? ` (depends on: ${t.dependsOn.join(", ")})` : "";
+    console.log(`  ${t.id}  ${t.title}${deps}`);
+  }
+  console.log();
+
   // Run the orchestrator
   const session = getSession(sessionId)!;
   const repoPath = session.repoLocalPath!;
   const sessionBranch = session.workingBranch!;
 
-  const result = await runOrchestrator(sessionId, repoPath, sessionBranch);
+  const panel = new AgentPanel();
+  let agentCounter = 0;
+  const callbacks: OrchestratorCallbacks = {
+    onAgentStart: (taskId, taskTitle, role) => {
+      panel.addAgent(`${role.toLowerCase()}-${++agentCounter}`, role, taskId, taskTitle);
+    },
+    onAgentOutput: (_taskId, role, chunk) => {
+      const id = `${role.toLowerCase()}-${agentCounter}`;
+      panel.appendOutput(id, chunk);
+    },
+    onAgentEnd: (_taskId, role, success) => {
+      const id = `${role.toLowerCase()}-${agentCounter}`;
+      panel.completeAgent(id, success);
+    },
+  };
+
+  const result = await runOrchestrator(sessionId, repoPath, sessionBranch, callbacks);
+  panel.destroy();
 
   // Get final task states
   const allTasks = getTasksForSession(sessionId).map((t) => ({

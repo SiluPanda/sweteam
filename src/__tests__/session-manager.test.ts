@@ -53,7 +53,7 @@ describe("session/manager", () => {
 
   describe("createSession", () => {
     it("should create a session and return session info", async () => {
-      const result = await createSession("myrepo", "Add dark theme");
+      const result = await createSession({ repoInput: "myrepo", goal: "Add dark theme" });
 
       expect(result.id).toMatch(/^s_/);
       expect(result.repo).toBe("owner/myrepo");
@@ -62,7 +62,7 @@ describe("session/manager", () => {
     });
 
     it("should insert session into database", async () => {
-      const result = await createSession("myrepo", "Build feature");
+      const result = await createSession({ repoInput: "myrepo", goal: "Build feature" });
 
       const session = getSession(result.id);
       expect(session).not.toBeNull();
@@ -72,12 +72,21 @@ describe("session/manager", () => {
     });
 
     it("should insert a system message on creation", async () => {
-      const result = await createSession("myrepo", "Build feature");
+      const result = await createSession({ repoInput: "myrepo", goal: "Build feature" });
 
       const msgs = getMessages(result.id);
       expect(msgs.length).toBe(1);
       expect(msgs[0].role).toBe("system");
       expect(msgs[0].content).toContain("Session created for owner/myrepo");
+    });
+
+    it("should create session without goal", async () => {
+      const result = await createSession({ repoInput: "myrepo" });
+
+      expect(result.id).toMatch(/^s_/);
+      expect(result.workingBranch).toMatch(/^sw\/s_[a-zA-Z0-9_-]+$/);
+      const session = getSession(result.id);
+      expect(session!.goal).toBe("");
     });
   });
 
@@ -87,7 +96,7 @@ describe("session/manager", () => {
     });
 
     it("should return session when it exists", async () => {
-      const result = await createSession("myrepo", "Goal");
+      const result = await createSession({ repoInput: "myrepo", goal: "Goal" });
       const session = getSession(result.id);
 
       expect(session).not.toBeNull();
@@ -101,8 +110,8 @@ describe("session/manager", () => {
     });
 
     it("should return all sessions", async () => {
-      await createSession("repo1", "Goal 1");
-      await createSession("repo2", "Goal 2");
+      await createSession({ repoInput: "repo1", goal: "Goal 1" });
+      await createSession({ repoInput: "repo2", goal: "Goal 2" });
 
       const list = listSessions();
       expect(list.length).toBe(2);
@@ -111,7 +120,7 @@ describe("session/manager", () => {
 
   describe("stopSession", () => {
     it("should set status to stopped", async () => {
-      const result = await createSession("myrepo", "Goal");
+      const result = await createSession({ repoInput: "myrepo", goal: "Goal" });
       stopSession(result.id);
 
       const session = getSession(result.id);
@@ -126,7 +135,7 @@ describe("session/manager", () => {
 
   describe("deleteSession", () => {
     it("should remove session from database", async () => {
-      const result = await createSession("myrepo", "Goal");
+      const result = await createSession({ repoInput: "myrepo", goal: "Goal" });
       deleteSession(result.id);
 
       expect(getSession(result.id)).toBeNull();
@@ -139,7 +148,7 @@ describe("session/manager", () => {
 
   describe("addMessage", () => {
     it("should add a message and return its id", async () => {
-      const session = await createSession("myrepo", "Goal");
+      const session = await createSession({ repoInput: "myrepo", goal: "Goal" });
       const msgId = addMessage(session.id, "user", "Hello", { phase: "planning" });
 
       expect(msgId).toBeTruthy();
@@ -153,7 +162,7 @@ describe("session/manager", () => {
 
   describe("getMessages", () => {
     it("should return messages in order", async () => {
-      const session = await createSession("myrepo", "Goal");
+      const session = await createSession({ repoInput: "myrepo", goal: "Goal" });
       addMessage(session.id, "user", "First");
       addMessage(session.id, "agent", "Second");
 
@@ -166,7 +175,7 @@ describe("session/manager", () => {
     });
 
     it("should respect limit parameter", async () => {
-      const session = await createSession("myrepo", "Goal");
+      const session = await createSession({ repoInput: "myrepo", goal: "Goal" });
       addMessage(session.id, "user", "Msg 1");
       addMessage(session.id, "user", "Msg 2");
       addMessage(session.id, "user", "Msg 3");

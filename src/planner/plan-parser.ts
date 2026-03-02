@@ -117,6 +117,67 @@ function extractListItems(content: string, keyword: string): string[] {
     .filter(Boolean);
 }
 
+function parseTable(text: string): ParsedTask[] {
+  // Match markdown tables with a header row containing "id" and "title"
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  let headerIdx = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes("|") && /\bid\b/i.test(lines[i]) && /\btitle\b/i.test(lines[i])) {
+      headerIdx = i;
+      break;
+    }
+  }
+
+  if (headerIdx === -1) return [];
+
+  // Split table row into cells, preserving empty cells but stripping
+  // the leading/trailing empty strings from outer `|` delimiters
+  const parseCells = (line: string): string[] => {
+    const cells = line.split("|").map((c) => c.trim());
+    // Remove leading/trailing empty strings from outer pipes
+    if (cells.length > 0 && cells[0] === "") cells.shift();
+    if (cells.length > 0 && cells[cells.length - 1] === "") cells.pop();
+    return cells;
+  };
+
+  const headers = parseCells(lines[headerIdx]).map((h) =>
+    h.toLowerCase().replace(/[^a-z_]/g, ""),
+  );
+
+  // Skip separator row (e.g., |---|---|)
+  let dataStart = headerIdx + 1;
+  if (dataStart < lines.length && /^[\s|:-]+$/.test(lines[dataStart])) {
+    dataStart++;
+  }
+
+  const tasks: ParsedTask[] = [];
+  for (let i = dataStart; i < lines.length; i++) {
+    if (!lines[i].includes("|")) break;
+    const cells = parseCells(lines[i]);
+    if (cells.length < 2) continue;
+
+    const row: Record<string, string> = {};
+    for (let j = 0; j < headers.length && j < cells.length; j++) {
+      row[headers[j]] = cells[j];
+    }
+
+    tasks.push({
+      id: row.id || `task-${String(tasks.length + 1).padStart(3, "0")}`,
+      title: row.title || "Untitled task",
+      description: row.description || "",
+      filesLikelyTouched: (row.files_likely_touched || row.files || "")
+        .split(",").map((s) => s.trim()).filter(Boolean),
+      dependsOn: (row.depends_on || row.dependencies || "")
+        .split(",").map((s) => s.trim()).filter(Boolean),
+      acceptanceCriteria: (row.acceptance_criteria || row.criteria || "")
+        .split(",").map((s) => s.trim()).filter(Boolean),
+    });
+  }
+
+  return tasks;
+}
+
 export function parsePlan(agentOutput: string): ParsedPlan {
   // Try JSON first
   const jsonTasks = tryParseJson(agentOutput);
@@ -124,10 +185,16 @@ export function parsePlan(agentOutput: string): ParsedPlan {
     return { tasks: jsonTasks, raw: agentOutput };
   }
 
-  // Fall back to markdown parsing
+  // Try markdown headers
   const mdTasks = parseMarkdown(agentOutput);
   if (mdTasks.length > 0) {
     return { tasks: mdTasks, raw: agentOutput };
+  }
+
+  // Try markdown table
+  const tableTasks = parseTable(agentOutput);
+  if (tableTasks.length > 0) {
+    return { tasks: tableTasks, raw: agentOutput };
   }
 
   return { tasks: [], raw: agentOutput };
