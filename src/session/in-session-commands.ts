@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../db/client.js";
 import { sessions, tasks as tasksTable } from "../db/schema.js";
 import { git } from "../git/git.js";
+import { displayTaskId } from "../orchestrator/orchestrator.js";
 
 // @status — Task progress with summary
 export function getStatusDisplay(sessionId: string): string {
@@ -60,7 +61,7 @@ export function getStatusDisplay(sessionId: string): string {
       default:
         icon = "○";
     }
-    lines.push(`  ${icon} ${task.id}  ${task.title}  [${task.status}]`);
+    lines.push(`  ${icon} ${displayTaskId(task.id)}  ${task.title}  [${task.status}]`);
   }
 
   const total = taskRows.length;
@@ -176,7 +177,7 @@ export function getTasksDisplay(sessionId: string): string {
     const review = task.reviewVerdict
       ? ` (review: ${task.reviewVerdict}, cycles: ${task.reviewCycles})`
       : "";
-    lines.push(`  ${task.id}: ${task.title} [${task.status}]${review}`);
+    lines.push(`  ${displayTaskId(task.id)}: ${task.title} [${task.status}]${review}`);
   }
 
   return lines.join("\n");

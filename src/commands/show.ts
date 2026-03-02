@@ -6,6 +6,7 @@ import {
 } from "../db/schema.js";
 import { getSession, getMessages } from "../session/manager.js";
 import { relativeTime, formatDuration } from "../utils/time.js";
+import { displayTaskId } from "../orchestrator/orchestrator.js";
 
 export interface DetailedSessionView {
   id: string;
@@ -174,7 +175,7 @@ export function formatDetailedView(view: DetailedSessionView): string {
         ? ` (review: ${task.reviewVerdict}, cycles: ${task.reviewCycles})`
         : "";
       lines.push(
-        `│  ${icon} ${task.id}: ${task.title} [${task.status}]${review}`,
+        `│  ${icon} ${displayTaskId(task.id)}: ${task.title} [${task.status}]${review}`,
       );
     }
   } else {

@@ -10,6 +10,7 @@ import {
   getTasksForSession,
   insertTasksFromPlan,
   runOrchestrator,
+  scopeTaskId,
   type OrchestratorCallbacks,
 } from "./orchestrator.js";
 import { pushBranch } from "../git/git.js";
@@ -134,6 +135,7 @@ export function applyPlanDelta(
 
   // Re-queue modified tasks
   for (const mod of delta.modifiedTasks) {
+    const dbId = scopeTaskId(sessionId, mod.id);
     db.update(tasksTable)
       .set({
         status: "queued",
@@ -146,7 +148,7 @@ export function applyPlanDelta(
         branchName: null,
         updatedAt: new Date(),
       })
-      .where(eq(tasksTable.id, mod.id))
+      .where(eq(tasksTable.id, dbId))
       .run();
   }
 

@@ -19,6 +19,18 @@ export interface OrchestratorResult {
   blocked: string[];
 }
 
+/** Scope a plan-level task ID to a session so it is globally unique in the DB. */
+export function scopeTaskId(sessionId: string, planTaskId: string): string {
+  if (planTaskId.includes(":")) return planTaskId; // already scoped
+  return `${sessionId}:${planTaskId}`;
+}
+
+/** Strip the session prefix from a scoped task ID for user-facing display. */
+export function displayTaskId(dbId: string): string {
+  const idx = dbId.indexOf(":");
+  return idx >= 0 ? dbId.slice(idx + 1) : dbId;
+}
+
 export function insertTasksFromPlan(
   sessionId: string,
   parsedTasks: ParsedTask[],
@@ -26,17 +38,28 @@ export function insertTasksFromPlan(
   const db = getDb();
   const now = new Date();
 
+  // Build a map from plan IDs to session-scoped DB IDs
+  const idMap = new Map<string, string>();
+  for (const t of parsedTasks) {
+    idMap.set(t.id, scopeTaskId(sessionId, t.id));
+  }
+
   for (let i = 0; i < parsedTasks.length; i++) {
     const t = parsedTasks[i];
+    const dbId = idMap.get(t.id)!;
+    const scopedDeps = t.dependsOn.map(
+      (dep) => idMap.get(dep) ?? scopeTaskId(sessionId, dep),
+    );
+
     db.insert(tasksTable)
       .values({
-        id: t.id,
+        id: dbId,
         sessionId,
         title: t.title,
         description: t.description,
         status: "queued",
         dependsOn:
-          t.dependsOn.length > 0 ? JSON.stringify(t.dependsOn) : null,
+          scopedDeps.length > 0 ? JSON.stringify(scopedDeps) : null,
         filesLikelyTouched:
           t.filesLikelyTouched.length > 0
             ? JSON.stringify(t.filesLikelyTouched)
@@ -157,14 +180,14 @@ export async function runOrchestrator(
         addMessage(
           sessionId,
           "system",
-          `Task ${task.id} blocked: dependency failed`,
+          `Task ${displayTaskId(task.id)} blocked: dependency failed`,
         );
         continue;
       }
     }
 
     // Run the task — Coder phase
-    addMessage(sessionId, "system", `Starting task ${task.id}: ${task.title}`);
+    addMessage(sessionId, "system", `Starting task ${displayTaskId(task.id)}: ${task.title}`);
 
     cb.onAgentStart?.(task.id, task.title, "Coder");
     const coderOutput = cb.onAgentOutput
@@ -181,7 +204,7 @@ export async function runOrchestrator(
       addMessage(
         sessionId,
         "system",
-        `Task ${task.id} failed: ${result.output.slice(0, 200)}`,
+        `Task ${displayTaskId(task.id)} failed: ${result.output.slice(0, 200)}`,
       );
       continue;
     }
@@ -208,7 +231,7 @@ export async function runOrchestrator(
     if (reviewResult.merged) {
       completedIds.add(task.id);
       completed.push(task.id);
-      addMessage(sessionId, "system", `Task ${task.id} completed and merged`);
+      addMessage(sessionId, "system", `Task ${displayTaskId(task.id)} completed and merged`);
     } else {
       failed.push(task.id);
       const newBlocked = markBlockedTasks(task.id, allTasks);
@@ -216,7 +239,7 @@ export async function runOrchestrator(
       addMessage(
         sessionId,
         "system",
-        `Task ${task.id} failed review after ${config.execution.max_review_cycles} cycles`,
+        `Task ${displayTaskId(task.id)} failed review after ${config.execution.max_review_cycles} cycles`,
       );
     }
   }

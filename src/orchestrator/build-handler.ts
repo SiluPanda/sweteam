@@ -8,6 +8,7 @@ import {
   insertTasksFromPlan,
   getTasksForSession,
   runOrchestrator,
+  displayTaskId,
   type OrchestratorCallbacks,
 } from "./orchestrator.js";
 import { pushBranch, createPR } from "../git/git.js";
@@ -43,7 +44,7 @@ export function generatePrBody(
       default:
         icon = "○";
     }
-    lines.push(`- ${icon} ${task.id}: ${task.title}`);
+    lines.push(`- ${icon} ${displayTaskId(task.id)}: ${task.title}`);
   }
 
   lines.push("");
@@ -57,7 +58,7 @@ export function generatePrBody(
     lines.push("## Escalated Tasks");
     for (const id of taskResults.failed) {
       const task = allTasks.find((t) => t.id === id);
-      lines.push(`- ${id}: ${task?.title ?? "unknown"}`);
+      lines.push(`- ${displayTaskId(id)}: ${task?.title ?? "unknown"}`);
     }
   }
 
@@ -92,7 +93,7 @@ export function formatCompletionReport(
       default:
         prefix = "  ○";
     }
-    lines.push(`${prefix} ${task.id}  ${task.title}`);
+    lines.push(`${prefix} ${displayTaskId(task.id)}  ${task.title}`);
   }
 
   lines.push("");

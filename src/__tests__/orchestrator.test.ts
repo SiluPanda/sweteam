@@ -62,10 +62,10 @@ describe("orchestrator — insertTasksFromPlan", () => {
 
     const tasks = getTasksForSession("s_orch");
     expect(tasks.length).toBe(2);
-    expect(tasks[0].id).toBe("task-001");
+    expect(tasks[0].id).toBe("s_orch:task-001");
     expect(tasks[0].status).toBe("queued");
-    expect(tasks[1].id).toBe("task-002");
-    expect(tasks[1].dependsOn).toBe(JSON.stringify(["task-001"]));
+    expect(tasks[1].id).toBe("s_orch:task-002");
+    expect(tasks[1].dependsOn).toBe(JSON.stringify(["s_orch:task-001"]));
   });
 
   it("should set correct order", () => {
@@ -143,7 +143,7 @@ describe("orchestrator — getTasksForSession", () => {
     insertTasksFromPlan("s_tasks", parsedTasks);
 
     const tasks = getTasksForSession("s_tasks");
-    expect(tasks[0].id).toBe("t-1");
-    expect(tasks[1].id).toBe("t-2");
+    expect(tasks[0].id).toBe("s_tasks:t-1");
+    expect(tasks[1].id).toBe("s_tasks:t-2");
   });
 });
