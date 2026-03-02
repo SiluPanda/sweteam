@@ -6,19 +6,48 @@
   "bin": {
     "sweteam": "./dist/index.js"
   },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**/*",
+    "!dist/__tests__",
+    "drizzle",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "cli",
     "coding-agent",
     "orchestrator",
-    "ai"
+    "ai",
+    "claude",
+    "codex",
+    "opencode",
+    "autonomous",
+    "git",
+    "github",
+    "pull-request"
   ],
+  "author": "SiluPanda",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SiluPanda/sweteam.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SiluPanda/sweteam/issues"
+  },
+  "homepage": "https://github.com/SiluPanda/sweteam#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.3.3",

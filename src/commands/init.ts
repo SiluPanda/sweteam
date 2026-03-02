@@ -36,8 +36,7 @@ export function runInit(
   let configWritten = false;
   if (!existsSync(configPath) || opts.force) {
     mkdirSync(dirname(configPath), { recursive: true });
-    const tomlObj = config as unknown as Record<string, unknown>;
-    writeFileSync(configPath, stringifyTOML(tomlObj), "utf-8");
+    writeFileSync(configPath, stringifyTOML(config as any), "utf-8");
     configWritten = true;
   }
 
