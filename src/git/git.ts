@@ -1,4 +1,7 @@
 import { execSync } from "child_process";
+import { existsSync, mkdirSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
 
 export function git(args: string, cwd: string): string {
   return execSync(`git ${args}`, {
@@ -84,4 +87,21 @@ export function createPR(
     `pr create --title "${title.replace(/"/g, '\\"')}" --body "${body.replace(/"/g, '\\"')}" --base ${base} --head ${head}`,
     cwd,
   );
+}
+
+export function cloneOrLocateRepo(repo: string): string {
+  const reposDir = join(homedir(), ".sweteam", "repos");
+  const repoDirName = repo.replace("/", "--");
+  const repoPath = join(reposDir, repoDirName);
+
+  if (existsSync(repoPath)) {
+    git("fetch origin", repoPath);
+    git("checkout main", repoPath);
+    git("pull", repoPath);
+    return repoPath;
+  }
+
+  mkdirSync(reposDir, { recursive: true });
+  gh(`repo clone ${repo} ${repoPath}`, ".");
+  return repoPath;
 }
