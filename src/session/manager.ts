@@ -17,17 +17,37 @@ function slugify(text: string): string {
     .slice(0, 30);
 }
 
+export interface CreateSessionOpts {
+  repoInput: string;
+  goal?: string;
+  /** When true, repoInput is treated as a local path (skip clone). */
+  local?: boolean;
+}
+
 export async function createSession(
-  repoInput: string,
-  goal: string,
+  opts: CreateSessionOpts,
 ): Promise<{ id: string; repo: string; repoLocalPath: string; workingBranch: string }> {
   const config = loadConfig();
-  const repo = resolveRepo(repoInput);
-  const repoLocalPath = cloneOrLocateRepo(repo);
+
+  let repo: string;
+  let repoLocalPath: string;
+
+  if (opts.local) {
+    // Local workspace — repoInput is an absolute path
+    repoLocalPath = opts.repoInput;
+    const { repoFromRemote } = await import("../git/git.js");
+    repo = repoFromRemote(repoLocalPath) ?? repoLocalPath;
+  } else {
+    repo = resolveRepo(opts.repoInput);
+    repoLocalPath = cloneOrLocateRepo(repo);
+  }
 
   const sessionId = generateSessionId();
-  const slug = slugify(goal);
-  const workingBranch = `${config.execution.branch_prefix}${sessionId}-${slug}`;
+  const goal = opts.goal ?? "";
+  const slug = goal ? slugify(goal) : "";
+  const workingBranch = slug
+    ? `${config.execution.branch_prefix}${sessionId}-${slug}`
+    : `${config.execution.branch_prefix}${sessionId}`;
 
   createBranch(workingBranch, "HEAD", repoLocalPath);
 

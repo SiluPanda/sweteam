@@ -1,5 +1,4 @@
 import { getSession, getMessages } from "../session/manager.js";
-import { startInteractiveSession } from "../session/interactive.js";
 import { tasks } from "../db/schema.js";
 import { getDb } from "../db/client.js";
 import { eq } from "drizzle-orm";
@@ -95,17 +94,8 @@ export function formatSummary(summary: SessionSummary): string {
 export async function handleEnter(sessionId: string): Promise<void> {
   const summary = buildSessionSummary(sessionId);
   if (!summary) {
-    console.error(`Session not found: ${sessionId}`);
-    process.exit(1);
+    throw new Error(`Session not found: ${sessionId}`);
   }
 
   console.log(formatSummary(summary));
-
-  const session = getSession(sessionId)!;
-  await startInteractiveSession(
-    sessionId,
-    session.repo,
-    session.goal,
-    session.repoLocalPath ?? ".",
-  );
 }

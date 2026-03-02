@@ -1,8 +1,10 @@
+import chalk from "chalk";
 import {
   listSessionsEnriched,
   type EnrichedSession,
 } from "../session/manager.js";
 import { relativeTime } from "../utils/time.js";
+import { vLen, rPad } from "../ui/banner.js";
 
 export function formatStatus(session: EnrichedSession): string {
   const { status, planReady, messageCount, tasksDone, tasksTotal, prNumber } =
@@ -33,35 +35,84 @@ export function formatStatus(session: EnrichedSession): string {
   }
 }
 
+/** Truncate `s` to `max` visible chars and pad to exactly `max`. */
+function fit(s: string, max: number): string {
+  if (s.length > max) return s.slice(0, max - 1) + "…";
+  return s.padEnd(max);
+}
+
+/** Right-align `s` within `width` chars. */
+function rAlign(s: string, width: number): string {
+  if (s.length >= width) return s.slice(0, width);
+  return " ".repeat(width - s.length) + s;
+}
+
+// Column widths
+const COL = { id: 14, repo: 22, goal: 26, status: 22, updated: 10 } as const;
+
 export function formatSessionTable(sessionList: EnrichedSession[]): string {
   if (sessionList.length === 0) {
     return "No sessions found. Use `sweteam create <repo> <goal>` to start one.";
   }
 
-  const header = `${"ID".padEnd(14)} ${"Repo".padEnd(22)} ${"Goal".padEnd(24)} ${"Status".padEnd(24)} ${"Updated".padEnd(8)}`;
-  const separator = `${"─".repeat(14)} ${"─".repeat(22)} ${"─".repeat(24)} ${"─".repeat(24)} ${"─".repeat(8)}`;
+  const border = chalk.blue;
+  const dim = chalk.dim;
+  const head = chalk.bold.blueBright;
 
-  const rows = sessionList.map((s) => {
-    const id = s.id.padEnd(14);
-    const repo =
-      s.repo.length > 20 ? s.repo.slice(0, 19) + "…" : s.repo.padEnd(22);
-    const goalTrunc =
-      s.goal.length > 22 ? s.goal.slice(0, 21) + "…" : s.goal.padEnd(24);
-    const status = formatStatus(s).padEnd(24);
-    const updated = relativeTime(s.updatedAt).padEnd(8);
-    return `${id} ${repo} ${goalTrunc} ${status} ${updated}`;
+  // Inner width = sum of columns + gaps (1 space between each pair + 2 padding each side)
+  const innerW =
+    COL.id + COL.repo + COL.goal + COL.status + COL.updated + 4 + 4;
+
+  const top = border("╭" + "─".repeat(innerW) + "╮");
+  const bot = border("╰" + "─".repeat(innerW) + "╯");
+  const mid = border("├" + "─".repeat(innerW) + "┤");
+
+  const row = (content: string) =>
+    border("│") + "  " + rPad(content, innerW - 2) + border("│");
+
+  // Title
+  const titleLine = row(head("sweteam Sessions"));
+
+  // Header
+  const headerLine = row(
+    [
+      head(fit("ID", COL.id)),
+      head(fit("Repo", COL.repo)),
+      head(fit("Goal", COL.goal)),
+      head(fit("Status", COL.status)),
+      head(rAlign("Updated", COL.updated)),
+    ].join(" "),
+  );
+
+  // Separator
+  const sepLine = row(
+    dim(
+      [
+        "─".repeat(COL.id),
+        "─".repeat(COL.repo),
+        "─".repeat(COL.goal),
+        "─".repeat(COL.status),
+        "─".repeat(COL.updated),
+      ].join(" "),
+    ),
+  );
+
+  // Data rows
+  const dataRows = sessionList.map((s) => {
+    return row(
+      [
+        chalk.cyan(fit(s.id, COL.id)),
+        fit(s.repo, COL.repo),
+        dim(fit(s.goal, COL.goal)),
+        fit(formatStatus(s), COL.status),
+        rAlign(relativeTime(s.updatedAt), COL.updated),
+      ].join(" "),
+    );
   });
 
-  const boxWidth = 98;
-  return [
-    "╔" + "═".repeat(boxWidth) + "╗",
-    "║  sweteam Sessions" + " ".repeat(boxWidth - 20) + "  ║",
-    "╠" + "═".repeat(boxWidth) + "╣",
-    `║  ${header}  ║`,
-    `║  ${separator}  ║`,
-    ...rows.map((r) => `║  ${r}  ║`),
-    "╚" + "═".repeat(boxWidth) + "╝",
-  ].join("\n");
+  return [top, titleLine, mid, headerLine, sepLine, ...dataRows, bot].join(
+    "\n",
+  );
 }
 
 export async function handleList(

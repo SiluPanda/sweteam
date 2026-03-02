@@ -77,6 +77,7 @@ export async function reviewTask(
   task: TaskRecord,
   diff: string,
   repoPath: string,
+  onOutput?: (chunk: string) => void,
 ): Promise<ReviewResult> {
   const config = loadConfig();
   const adapter = resolveAdapter(config.roles.reviewer, config);
@@ -87,6 +88,7 @@ export async function reviewTask(
     prompt,
     cwd: repoPath,
     timeout: 0,
+    onOutput,
   });
 
   return parseReviewResponse(result.output);
@@ -124,6 +126,7 @@ export async function reviewAndMerge(
   sessionBranch: string,
   repoPath: string,
   maxCycles: number = 3,
+  onOutput?: (chunk: string) => void,
 ): Promise<{ merged: boolean; reviewResult: ReviewResult }> {
   const config = loadConfig();
   const db = getDb();
@@ -132,7 +135,7 @@ export async function reviewAndMerge(
     // Always get a fresh diff for this review cycle
     const diff = git(`diff ${sessionBranch}...${task.branchName}`, repoPath);
 
-    const reviewResult = await reviewTask(task, diff, repoPath);
+    const reviewResult = await reviewTask(task, diff, repoPath, onOutput);
 
     // Update review info in DB
     db.update(tasks)
@@ -168,6 +171,7 @@ Summary: ${reviewResult.summary}`;
         prompt: fixPrompt,
         cwd: repoPath,
         timeout: 0,
+        onOutput,
       });
 
       // Re-commit fixes

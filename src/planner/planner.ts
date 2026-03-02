@@ -143,6 +143,7 @@ export async function invokePlanner(
   repo: string,
   goal: string,
   repoPath: string,
+  onOutput?: (chunk: string) => void,
 ): Promise<string> {
   const config = loadConfig();
   const adapter = resolveAdapter(config.roles.planner, config);
@@ -158,6 +159,7 @@ export async function invokePlanner(
     prompt,
     cwd: repoPath,
     timeout: 0,
+    onOutput,
   });
 
   return result.output;

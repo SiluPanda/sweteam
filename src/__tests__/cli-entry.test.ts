@@ -44,7 +44,16 @@ describe("CLI entry point (src/index.ts)", () => {
     expect(indexContent).toContain('.command("init")');
   });
 
-  it("should call program.parse()", () => {
+  it("should call program.parse() in CLI mode", () => {
     expect(indexContent).toContain("program.parse()");
+  });
+
+  it("should detect no-subcommand and launch REPL", () => {
+    expect(indexContent).toContain("hasSubcommand");
+    expect(indexContent).toContain("runRepl");
+  });
+
+  it("should import REPL module", () => {
+    expect(indexContent).toContain("./repl/repl.js");
   });
 });

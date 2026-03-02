@@ -6,9 +6,14 @@ import { transition } from "../session/state-machine.js";
 import { addMessage, getSession } from "../session/manager.js";
 import { resolveAdapter } from "../adapters/adapter.js";
 import { loadConfig } from "../config/loader.js";
-import { getTasksForSession, insertTasksFromPlan } from "./orchestrator.js";
-import { runOrchestrator } from "./orchestrator.js";
+import {
+  getTasksForSession,
+  insertTasksFromPlan,
+  runOrchestrator,
+  type OrchestratorCallbacks,
+} from "./orchestrator.js";
 import { pushBranch } from "../git/git.js";
+import { AgentPanel } from "../ui/agent-panel.js";
 
 export interface PlanDelta {
   modifiedTasks: Array<{ id: string; changes: string }>;
@@ -250,12 +255,20 @@ export async function handleFeedback(
     iterHistory,
   );
 
+  const panel = new AgentPanel();
+  let agentCounter = 0;
+
+  // Planner phase
+  panel.addAgent("planner-1", "Planner", sessionId, "Analyzing feedback");
+  agentCounter++;
   const adapter = resolveAdapter(config.roles.planner, config);
   const result = await adapter.execute({
     prompt,
     cwd: session.repoLocalPath ?? ".",
     timeout: 0,
+    onOutput: (chunk: string) => panel.appendOutput("planner-1", chunk),
   });
+  panel.completeAgent("planner-1", true);
 
   // Parse the plan delta
   const delta = parsePlanDelta(result.output);
@@ -276,7 +289,22 @@ export async function handleFeedback(
   const repoPath = session.repoLocalPath!;
   const sessionBranch = session.workingBranch!;
 
-  await runOrchestrator(sessionId, repoPath, sessionBranch);
+  const callbacks: OrchestratorCallbacks = {
+    onAgentStart: (taskId, taskTitle, role) => {
+      panel.addAgent(`${role.toLowerCase()}-${++agentCounter}`, role, taskId, taskTitle);
+    },
+    onAgentOutput: (_taskId, role, chunk) => {
+      const id = `${role.toLowerCase()}-${agentCounter}`;
+      panel.appendOutput(id, chunk);
+    },
+    onAgentEnd: (_taskId, role, success) => {
+      const id = `${role.toLowerCase()}-${agentCounter}`;
+      panel.completeAgent(id, success);
+    },
+  };
+
+  await runOrchestrator(sessionId, repoPath, sessionBranch, callbacks);
+  panel.destroy();
 
   // Push updates
   try {

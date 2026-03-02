@@ -95,6 +95,37 @@ export function createPR(
   );
 }
 
+/** Check whether `dir` is inside a git working tree. */
+export function isGitRepo(dir: string): boolean {
+  try {
+    git("rev-parse --is-inside-work-tree", dir);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Return the git working-tree root for `dir`. */
+export function getRepoRoot(dir: string): string {
+  return git("rev-parse --show-toplevel", dir);
+}
+
+/** Derive an owner/repo slug from the origin remote URL. */
+export function repoFromRemote(dir: string): string | null {
+  try {
+    const url = git("remote get-url origin", dir);
+    // SSH:  git@github.com:owner/repo.git
+    const ssh = url.match(/github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?$/);
+    if (ssh) return ssh[1];
+    // HTTPS: https://github.com/owner/repo.git
+    const https = url.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/);
+    if (https) return https[1];
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function cloneOrLocateRepo(repo: string): string {
   const reposDir = join(homedir(), ".sweteam", "repos");
   const repoDirName = repo.replace("/", "--");

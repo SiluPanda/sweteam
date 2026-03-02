@@ -209,8 +209,7 @@ export function formatDetailedView(view: DetailedSessionView): string {
 export async function handleShow(sessionId: string): Promise<void> {
   const view = buildDetailedView(sessionId);
   if (!view) {
-    console.error(`Session not found: ${sessionId}`);
-    process.exit(1);
+    throw new Error(`Session not found: ${sessionId}`);
   }
   console.log(formatDetailedView(view));
 }

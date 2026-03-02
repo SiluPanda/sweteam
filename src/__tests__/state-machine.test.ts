@@ -47,8 +47,12 @@ describe("session/state-machine — validateTransition", () => {
     expect(validateTransition("planning", "awaiting_feedback")).toBe(false);
   });
 
-  it("should reject building -> planning", () => {
-    expect(validateTransition("building", "planning")).toBe(false);
+  it("should allow building -> planning (retry after failure)", () => {
+    expect(validateTransition("building", "planning")).toBe(true);
+  });
+
+  it("should allow building -> building (retry)", () => {
+    expect(validateTransition("building", "building")).toBe(true);
   });
 
   it("should reject awaiting_feedback -> building", () => {

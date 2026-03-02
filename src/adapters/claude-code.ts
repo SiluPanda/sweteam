@@ -23,7 +23,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     const startTime = Date.now();
 
     return new Promise((resolve, reject) => {
-      const proc = spawn("claude", ["-p", "--output-format", "json"], {
+      const proc = spawn("claude", ["-p"], {
         cwd: opts.cwd,
         stdio: ["pipe", "pipe", "pipe"],
       });
@@ -40,7 +40,12 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       });
 
       proc.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString();
+        const text = chunk.toString();
+        stderr += text;
+        // Stream stderr too so the user sees errors/progress
+        if (opts.onOutput) {
+          opts.onOutput(text);
+        }
       });
 
       const timer = timeout > 0 ? setTimeout(() => {

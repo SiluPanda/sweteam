@@ -3,8 +3,7 @@ import { deleteSession, getSession } from "../session/manager.js";
 export async function handleDelete(sessionId: string): Promise<void> {
   const session = getSession(sessionId);
   if (!session) {
-    console.error(`Session not found: ${sessionId}`);
-    process.exit(1);
+    throw new Error(`Session not found: ${sessionId}`);
   }
 
   deleteSession(sessionId);

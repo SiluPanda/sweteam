@@ -1,30 +1,50 @@
 import { createSession } from "../session/manager.js";
-import { startInteractiveSession } from "../session/interactive.js";
+import { isGitRepo, getRepoRoot } from "../git/git.js";
 
-export async function handleCreate(
-  repoInput: string,
-  goal: string,
-): Promise<void> {
+export interface CreateResult {
+  id: string;
+  repo: string;
+  repoLocalPath: string;
+  workingBranch: string;
+}
+
+export async function handleCreate(repoInput?: string): Promise<CreateResult | null> {
   try {
-    console.log(`Creating session for "${repoInput}" with goal: ${goal}`);
+    let local = false;
+    let effectiveRepo: string;
 
-    const session = await createSession(repoInput, goal);
+    if (repoInput) {
+      effectiveRepo = repoInput;
+    } else {
+      const cwd = process.cwd();
+      if (!isGitRepo(cwd)) {
+        console.error(
+          "Current directory is not a git repository.\n" +
+            "Run `git init` first, or pass a repo: /create <repo>",
+        );
+        return null;
+      }
+      effectiveRepo = getRepoRoot(cwd);
+      local = true;
+    }
+
+    console.log(`Creating session for "${effectiveRepo}"…`);
+
+    const session = await createSession({
+      repoInput: effectiveRepo,
+      local,
+    });
 
     console.log(`\nSession created:`);
     console.log(`  ID:     ${session.id}`);
     console.log(`  Repo:   ${session.repo}`);
     console.log(`  Branch: ${session.workingBranch}`);
-    console.log(`  Status: planning`);
+    console.log(`  Status: planning\n`);
 
-    await startInteractiveSession(
-      session.id,
-      session.repo,
-      goal,
-      session.repoLocalPath,
-    );
+    return session;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`Failed to create session: ${message}`);
-    process.exit(1);
+    return null;
   }
 }
