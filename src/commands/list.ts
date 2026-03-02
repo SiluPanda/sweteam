@@ -37,7 +37,20 @@ export function formatSessionTable(
   ].join("\n");
 }
 
-export async function handleList(): Promise<void> {
-  const sessionList = listSessions();
+export async function handleList(
+  filters?: { status?: string; repo?: string },
+): Promise<void> {
+  let sessionList = listSessions();
+
+  if (filters?.status) {
+    sessionList = sessionList.filter((s) => s.status === filters.status);
+  }
+  if (filters?.repo) {
+    const repoFilter = filters.repo.toLowerCase();
+    sessionList = sessionList.filter((s) =>
+      s.repo.toLowerCase().includes(repoFilter),
+    );
+  }
+
   console.log(formatSessionTable(sessionList));
 }
