@@ -11,7 +11,7 @@ export type SessionStatus =
 
 const VALID_TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
   planning: ["building", "stopped"],
-  building: ["awaiting_feedback", "stopped"],
+  building: ["building", "awaiting_feedback", "planning", "stopped"],
   awaiting_feedback: ["iterating", "stopped"],
   iterating: ["awaiting_feedback", "stopped"],
   stopped: ["building", "iterating"],

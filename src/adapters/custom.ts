@@ -32,7 +32,7 @@ export class CustomAdapter implements AgentAdapter {
     timeout?: number;
     onOutput?: (chunk: string) => void;
   }): Promise<AgentResult> {
-    const timeout = opts.timeout ?? 300000;
+    const timeout = opts.timeout ?? 0;
     const startTime = Date.now();
     const promptVia = this.config.prompt_via ?? "stdin";
     const outputFrom = this.config.output_from ?? "stdout";
@@ -69,11 +69,11 @@ export class CustomAdapter implements AgentAdapter {
         stderr += chunk.toString();
       });
 
-      const timer = setTimeout(() => {
+      const timer = timeout > 0 ? setTimeout(() => {
         proc.kill("SIGTERM");
         cleanup();
         reject(new Error(`${this.name} timed out after ${timeout}ms`));
-      }, timeout);
+      }, timeout) : null;
 
       const cleanup = () => {
         if (promptFile) {
@@ -84,7 +84,7 @@ export class CustomAdapter implements AgentAdapter {
       };
 
       proc.on("close", (code) => {
-        clearTimeout(timer);
+        if (timer) clearTimeout(timer);
         let output = stdout || stderr;
 
         if (outputFrom === "file") {
@@ -104,7 +104,7 @@ export class CustomAdapter implements AgentAdapter {
       });
 
       proc.on("error", (err) => {
-        clearTimeout(timer);
+        if (timer) clearTimeout(timer);
         cleanup();
         reject(err);
       });

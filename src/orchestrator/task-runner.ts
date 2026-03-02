@@ -114,16 +114,17 @@ export async function runTask(
     const result = await adapter.execute({
       prompt,
       cwd: repoPath,
-      timeout: 300000,
+      timeout: 0,
     });
 
-    // Capture diff
-    const diff = getDiff(repoPath);
-
-    // Commit changes if there are any
-    if (diff.length > 0) {
+    // Commit any uncommitted changes the coder left behind
+    const uncommitted = getDiff(repoPath);
+    if (uncommitted.length > 0) {
       commitAll(`feat(${task.id}): ${task.title}`, repoPath);
     }
+
+    // Capture the full diff of this task branch vs the session branch
+    const diff = git(`diff ${sessionBranch}...HEAD`, repoPath);
 
     // Update DB with results
     db.update(tasks)

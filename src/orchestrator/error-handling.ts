@@ -18,7 +18,7 @@ export async function executeWithRetry(
   taskId: string,
   sessionId: string,
 ): Promise<{ output: string; exitCode: number; durationMs: number }> {
-  const timeout = opts.timeout ?? 300000;
+  const timeout = opts.timeout ?? 0;
 
   try {
     const result = await adapter.execute({ ...opts, timeout });

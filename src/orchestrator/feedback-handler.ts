@@ -254,7 +254,7 @@ export async function handleFeedback(
   const result = await adapter.execute({
     prompt,
     cwd: session.repoLocalPath ?? ".",
-    timeout: 120000,
+    timeout: 0,
   });
 
   // Parse the plan delta

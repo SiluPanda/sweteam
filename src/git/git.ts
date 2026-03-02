@@ -44,7 +44,13 @@ export function createBranch(
   base: string,
   cwd: string,
 ): void {
-  git(`checkout -b ${name} ${base}`, cwd);
+  try {
+    git(`checkout -b ${name} ${base}`, cwd);
+  } catch {
+    // Branch already exists (e.g. retry after a failed build) — reset it to base
+    git(`checkout ${name}`, cwd);
+    git(`reset --hard ${base}`, cwd);
+  }
 }
 
 export function squashMerge(

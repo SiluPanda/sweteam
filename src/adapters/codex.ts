@@ -19,7 +19,7 @@ export class CodexAdapter implements AgentAdapter {
     timeout?: number;
     onOutput?: (chunk: string) => void;
   }): Promise<AgentResult> {
-    const timeout = opts.timeout ?? 300000;
+    const timeout = opts.timeout ?? 0;
     const startTime = Date.now();
 
     return new Promise((resolve, reject) => {
@@ -43,13 +43,13 @@ export class CodexAdapter implements AgentAdapter {
         stderr += chunk.toString();
       });
 
-      const timer = setTimeout(() => {
+      const timer = timeout > 0 ? setTimeout(() => {
         proc.kill("SIGTERM");
         reject(new Error(`Codex timed out after ${timeout}ms`));
-      }, timeout);
+      }, timeout) : null;
 
       proc.on("close", (code) => {
-        clearTimeout(timer);
+        if (timer) clearTimeout(timer);
         resolve({
           output: stdout || stderr,
           exitCode: code ?? 1,
@@ -58,7 +58,7 @@ export class CodexAdapter implements AgentAdapter {
       });
 
       proc.on("error", (err) => {
-        clearTimeout(timer);
+        if (timer) clearTimeout(timer);
         reject(err);
       });
     });

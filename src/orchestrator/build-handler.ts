@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "../db/client.js";
-import { sessions } from "../db/schema.js";
+import { sessions, tasks as tasksTable } from "../db/schema.js";
 import { transition } from "../session/state-machine.js";
 import { addMessage, getSession } from "../session/manager.js";
 import { parsePlan } from "../planner/plan-parser.js";
@@ -132,6 +132,11 @@ export async function handleBuild(
 
   // Transition to building
   transition(sessionId, "building");
+
+  // Clean up any leftover tasks from a previous failed build
+  db.delete(tasksTable)
+    .where(eq(tasksTable.sessionId, sessionId))
+    .run();
 
   // Insert tasks into DB
   insertTasksFromPlan(sessionId, plan.tasks);

@@ -86,7 +86,7 @@ export async function reviewTask(
   const result = await adapter.execute({
     prompt,
     cwd: repoPath,
-    timeout: 120000,
+    timeout: 0,
   });
 
   return parseReviewResponse(result.output);
@@ -129,9 +129,8 @@ export async function reviewAndMerge(
   const db = getDb();
 
   for (let cycle = 0; cycle < maxCycles; cycle++) {
-    // Get current diff
-    const diff =
-      task.diffPatch || git(`diff ${sessionBranch}...${task.branchName}`, repoPath);
+    // Always get a fresh diff for this review cycle
+    const diff = git(`diff ${sessionBranch}...${task.branchName}`, repoPath);
 
     const reviewResult = await reviewTask(task, diff, repoPath);
 
@@ -168,7 +167,7 @@ Summary: ${reviewResult.summary}`;
       await coderAdapter.execute({
         prompt: fixPrompt,
         cwd: repoPath,
-        timeout: 300000,
+        timeout: 0,
       });
 
       // Re-commit fixes
