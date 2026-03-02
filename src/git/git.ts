@@ -35,3 +35,23 @@ export function resolveRepo(input: string): string {
   const user = gh("api user -q .login", ".");
   return `${user}/${input}`;
 }
+
+export function createBranch(
+  name: string,
+  base: string,
+  cwd: string,
+): void {
+  git(`checkout -b ${name} ${base}`, cwd);
+}
+
+export function squashMerge(
+  source: string,
+  target: string,
+  message: string,
+  cwd: string,
+): void {
+  git(`checkout ${target}`, cwd);
+  git(`merge --squash ${source}`, cwd);
+  git(`commit -m "${message.replace(/"/g, '\\"')}"`, cwd);
+  git(`branch -D ${source}`, cwd);
+}
