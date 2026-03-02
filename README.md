@@ -1,8 +1,10 @@
 <p align="center">
-  <img src="https://img.shields.io/npm/v/sweteam?color=blue&label=npm" alt="npm version" />
-  <img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen" alt="node version" />
-  <img src="https://img.shields.io/badge/license-MIT-blue" alt="license" />
-  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs welcome" />
+<pre align="center">
+┌─────────────────┐
+│    ◉       ◉    │
+│    ─────────    │
+└─────────────────┘
+</pre>
 </p>
 
 <h1 align="center">sweteam</h1>
@@ -10,6 +12,13 @@
 <p align="center">
 <strong>Autonomous coding agent orchestrator — turns high-level goals into PR'd code.</strong><br/>
 <em>It is not another coding agent. It orchestrates the ones you already have.</em>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/npm/v/sweteam?color=blue&label=npm" alt="npm version" />
+  <img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen" alt="node version" />
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="license" />
+  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs welcome" />
 </p>
 
 <p align="center">
@@ -22,15 +31,25 @@
 
 ---
 
-## What is sweteam?
+## Why sweteam?
 
-sweteam sits **on top of** existing coding CLIs (Claude Code, Codex CLI, OpenCode) and orchestrates them into a persistent, session-based workflow. Give it a repo and a goal — it plans, codes, reviews, and opens a PR. Then it stays open for your feedback.
+AI coding agents are powerful, but using them on real tasks exposes a recurring set of problems: vague prompts produce vague code, large changes land as a single untested blob, mistakes aren't caught until you read the diff, and if anything crashes mid-run your progress is gone.
+
+sweteam fixes this by adding the missing orchestration layer:
+
+- **Granular task breakdown** — your goal is decomposed into small, scoped tasks with explicit acceptance criteria, so each agent call has a clear contract
+- **DAG execution** — tasks are organized into a dependency graph and dispatched in the correct order, with independent tasks running in parallel
+- **Multi-model review loop** — every task is reviewed by a separate agent against its acceptance criteria; failures are retried automatically up to a configurable limit
+- **Session persistence** — sessions, plans, tasks, diffs, and full conversation history are stored in SQLite; crash, close the terminal, come back tomorrow — nothing is lost
+- **Agent-agnostic** — works with Claude Code, Codex CLI, OpenCode, or any custom CLI that reads stdin and writes stdout
+
+The result: you describe what you want, refine the plan in conversation, type `@build`, and get a PR with reviewed, tested code — not a best-effort dump.
 
 ```
 You: "Add dark theme with system preference detection"
          |
          v
-  Planning Chat  <-- you refine the plan with an AI architect
+  Planning Chat  <-- refine the plan with an AI architect
          |
          |  @build
          v
@@ -48,19 +67,18 @@ You: "Add dark theme with system preference detection"
 When you launch `sweteam`, you're greeted with an interactive REPL:
 
 ```
-╭─── sweteam v0.1.0 ─────────────────────────────────────────────────────╮
-│                                                                         │
-│        Welcome to sweteam!                │ Getting started              │
-│                                           │ /create [repo]  Start a new │
-│          ┌─────────────────┐              │ /list           See all     │
-│          │    ◉       ◉    │              │ /enter <id>     Resume      │
-│          │    ─────────    │              │ ─────────────────────────── │
-│          └─────────────────┘              │ Recent sessions             │
-│                                           │ s_a1b2c3d4 Add dark theme  │
-│      Orchestrator · v0.1.0                │ s_e5f6g7h8 Fix auth flow   │
-│      ~/projects/myrepo                    │                             │
-│                                                                         │
-╰─────────────────────────────────────────────────────────────────────────╯
+╭─── sweteam v0.1.0 ────────────────────────────────────────────╮
+│                                │                              │
+│    Welcome to sweteam!         │ Getting started              │
+│                                │ /create [repo]  Start new    │
+│      ┌─────────────────┐       │ /list           See all      │
+│      │    ◉       ◉    │       │ /enter <id>     Resume       │
+│      │    ─────────    │       │ ──────────────────────────── │
+│      └─────────────────┘       │ Recent sessions              │
+│                                │ s_a1b2c3d4 Add dark theme    │
+│  Orchestrator · v0.1.0         │ s_e5f6g7h8 Fix auth flow     │
+│  ~/projects/myrepo             │                              │
+╰───────────────────────────────────────────────────────────────╯
 
 sweteam>
 ```
