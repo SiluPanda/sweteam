@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDb } from "../db/client.js";
-import { sessions, messages } from "../db/schema.js";
+import { sessions, messages, tasks as tasksTable } from "../db/schema.js";
 import { resolveRepo, cloneOrLocateRepo, createBranch } from "../git/git.js";
 import { loadConfig } from "../config/loader.js";
 
@@ -91,6 +91,71 @@ export function listSessions() {
     })
     .from(sessions)
     .all();
+}
+
+export interface EnrichedSession {
+  id: string;
+  repo: string;
+  goal: string;
+  status: string;
+  prUrl: string | null;
+  prNumber: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+  planReady: boolean;
+  messageCount: number;
+  tasksDone: number;
+  tasksTotal: number;
+}
+
+export function listSessionsEnriched(): EnrichedSession[] {
+  const db = getDb();
+  const sessionRows = db
+    .select({
+      id: sessions.id,
+      repo: sessions.repo,
+      goal: sessions.goal,
+      status: sessions.status,
+      prUrl: sessions.prUrl,
+      prNumber: sessions.prNumber,
+      planJson: sessions.planJson,
+      createdAt: sessions.createdAt,
+      updatedAt: sessions.updatedAt,
+    })
+    .from(sessions)
+    .all();
+
+  return sessionRows.map((s) => {
+    const msgRows = db
+      .select({ count: sql<number>`count(*)` })
+      .from(messages)
+      .where(eq(messages.sessionId, s.id))
+      .all();
+    const messageCount = msgRows[0]?.count ?? 0;
+
+    const taskRows = db
+      .select({ status: tasksTable.status })
+      .from(tasksTable)
+      .where(eq(tasksTable.sessionId, s.id))
+      .all();
+    const tasksTotal = taskRows.length;
+    const tasksDone = taskRows.filter((t) => t.status === "done").length;
+
+    return {
+      id: s.id,
+      repo: s.repo,
+      goal: s.goal,
+      status: s.status,
+      prUrl: s.prUrl,
+      prNumber: s.prNumber,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      planReady: s.planJson != null,
+      messageCount,
+      tasksDone,
+      tasksTotal,
+    };
+  });
 }
 
 export function stopSession(id: string): void {

@@ -45,6 +45,15 @@ program
   });
 
 program
+  .command("show")
+  .description("Show detailed status of a session")
+  .argument("<session_id>", "Session ID to inspect")
+  .action(async (sessionId: string) => {
+    const { handleShow } = await import("./commands/show.js");
+    await handleShow(sessionId);
+  });
+
+program
   .command("stop")
   .description("Stop the current session")
   .argument("<session_id>", "Session ID to stop")
