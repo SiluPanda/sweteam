@@ -68,3 +68,20 @@ export function commitAll(message: string, cwd: string): void {
   git("add -A", cwd);
   git(`commit -m "${message.replace(/"/g, '\\"')}"`, cwd);
 }
+
+export function pushBranch(branch: string, cwd: string): void {
+  git(`push origin ${branch}`, cwd);
+}
+
+export function createPR(
+  title: string,
+  body: string,
+  base: string,
+  head: string,
+  cwd: string,
+): string {
+  return gh(
+    `pr create --title "${title.replace(/"/g, '\\"')}" --body "${body.replace(/"/g, '\\"')}" --base ${base} --head ${head}`,
+    cwd,
+  );
+}
