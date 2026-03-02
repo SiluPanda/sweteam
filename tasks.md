@@ -33,7 +33,7 @@ All tasks are in logical execution order. Each task should be small and self-con
 ### Task 5: Create Drizzle schema file
 - Implement `src/db/schema.ts` with all four tables: `sessions`, `messages`, `tasks`, `iterations`
 - Match schema exactly from spec section 4.1
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 6: Create database client module
 - Implement `src/db/client.ts` — SQLite connection via `better-sqlite3`
