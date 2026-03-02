@@ -13,6 +13,7 @@ import {
 } from "./orchestrator.js";
 import { pushBranch, createPR } from "../git/git.js";
 import { AgentPanel } from "../ui/agent-panel.js";
+import { clearLog, writeEvent } from "../session/agent-log.js";
 
 export function generatePrBody(
   goal: string,
@@ -161,24 +162,32 @@ export async function handleBuild(
   const repoPath = session.repoLocalPath!;
   const sessionBranch = session.workingBranch!;
 
+  // Clear log file so watchers from other processes start fresh
+  clearLog(sessionId);
+
   const panel = new AgentPanel();
   let agentCounter = 0;
   const callbacks: OrchestratorCallbacks = {
     onAgentStart: (taskId, taskTitle, role) => {
-      panel.addAgent(`${role.toLowerCase()}-${++agentCounter}`, role, taskId, taskTitle);
+      const id = `${role.toLowerCase()}-${++agentCounter}`;
+      panel.addAgent(id, role, taskId, taskTitle);
+      writeEvent(sessionId, { type: "agent-start", id, role, taskId, title: taskTitle });
     },
     onAgentOutput: (_taskId, role, chunk) => {
       const id = `${role.toLowerCase()}-${agentCounter}`;
       panel.appendOutput(id, chunk);
+      writeEvent(sessionId, { type: "output", id, chunk });
     },
     onAgentEnd: (_taskId, role, success) => {
       const id = `${role.toLowerCase()}-${agentCounter}`;
       panel.completeAgent(id, success);
+      writeEvent(sessionId, { type: "agent-end", id, success });
     },
   };
 
   const result = await runOrchestrator(sessionId, repoPath, sessionBranch, callbacks);
   panel.destroy();
+  writeEvent(sessionId, { type: "build-complete", id: "build" });
 
   // Get final task states
   const allTasks = getTasksForSession(sessionId).map((t) => ({

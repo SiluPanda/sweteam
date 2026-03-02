@@ -15,6 +15,7 @@ import {
 } from "./orchestrator.js";
 import { pushBranch } from "../git/git.js";
 import { AgentPanel } from "../ui/agent-panel.js";
+import { clearLog, writeEvent } from "../session/agent-log.js";
 
 export interface PlanDelta {
   modifiedTasks: Array<{ id: string; changes: string }>;
@@ -257,20 +258,29 @@ export async function handleFeedback(
     iterHistory,
   );
 
+  // Clear log file so watchers from other processes start fresh
+  clearLog(sessionId);
+
   const panel = new AgentPanel();
   let agentCounter = 0;
 
   // Planner phase
-  panel.addAgent("planner-1", "Planner", sessionId, "Analyzing feedback");
+  const plannerId = "planner-1";
+  panel.addAgent(plannerId, "Planner", sessionId, "Analyzing feedback");
+  writeEvent(sessionId, { type: "agent-start", id: plannerId, role: "Planner", taskId: sessionId, title: "Analyzing feedback" });
   agentCounter++;
   const adapter = resolveAdapter(config.roles.planner, config);
   const result = await adapter.execute({
     prompt,
     cwd: session.repoLocalPath ?? ".",
     timeout: 0,
-    onOutput: (chunk: string) => panel.appendOutput("planner-1", chunk),
+    onOutput: (chunk: string) => {
+      panel.appendOutput(plannerId, chunk);
+      writeEvent(sessionId, { type: "output", id: plannerId, chunk });
+    },
   });
-  panel.completeAgent("planner-1", true);
+  panel.completeAgent(plannerId, true);
+  writeEvent(sessionId, { type: "agent-end", id: plannerId, success: true });
 
   // Parse the plan delta
   const delta = parsePlanDelta(result.output);
@@ -293,20 +303,25 @@ export async function handleFeedback(
 
   const callbacks: OrchestratorCallbacks = {
     onAgentStart: (taskId, taskTitle, role) => {
-      panel.addAgent(`${role.toLowerCase()}-${++agentCounter}`, role, taskId, taskTitle);
+      const id = `${role.toLowerCase()}-${++agentCounter}`;
+      panel.addAgent(id, role, taskId, taskTitle);
+      writeEvent(sessionId, { type: "agent-start", id, role, taskId, title: taskTitle });
     },
     onAgentOutput: (_taskId, role, chunk) => {
       const id = `${role.toLowerCase()}-${agentCounter}`;
       panel.appendOutput(id, chunk);
+      writeEvent(sessionId, { type: "output", id, chunk });
     },
     onAgentEnd: (_taskId, role, success) => {
       const id = `${role.toLowerCase()}-${agentCounter}`;
       panel.completeAgent(id, success);
+      writeEvent(sessionId, { type: "agent-end", id, success });
     },
   };
 
   await runOrchestrator(sessionId, repoPath, sessionBranch, callbacks);
   panel.destroy();
+  writeEvent(sessionId, { type: "build-complete", id: "build" });
 
   // Push updates
   try {

@@ -1,27 +1,23 @@
 <p align="center">
-<pre align="center">
-┌─────────────────┐
-│                 │
-│    ◉       ◉    │
-│                 │
-│    ─────────    │
-│                 │
-└─────────────────┘
-</pre>
+  <img src="https://img.shields.io/npm/v/sweteam?color=blue&label=npm" alt="npm version" />
+  <img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen" alt="node version" />
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="license" />
+  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs welcome" />
 </p>
 
 <h1 align="center">sweteam</h1>
 
 <p align="center">
-<strong>Autonomous coding agent orchestrator — turns high-level goals into PR'd code.</strong>
+<strong>Autonomous coding agent orchestrator — turns high-level goals into PR'd code.</strong><br/>
+<em>It is not another coding agent. It orchestrates the ones you already have.</em>
 </p>
 
 <p align="center">
-  <a href="#installation">Installation</a> •
-  <a href="#quick-start">Quick Start</a> •
-  <a href="#how-it-works">How It Works</a> •
-  <a href="#commands">Commands</a> •
-  <a href="#configuration">Configuration</a>
+  <a href="#quick-start">Quick Start</a> &middot;
+  <a href="#how-it-works">How It Works</a> &middot;
+  <a href="#commands">Commands</a> &middot;
+  <a href="#configuration">Configuration</a> &middot;
+  <a href="#contributing">Contributing</a>
 </p>
 
 ---
@@ -32,33 +28,71 @@ sweteam sits **on top of** existing coding CLIs (Claude Code, Codex CLI, OpenCod
 
 ```
 You: "Add dark theme with system preference detection"
-         │
-         ▼
-  Planning Chat ◄── you refine the plan with an AI architect
-         │
-         │  @build
-         ▼
-  Decompose → Code (parallel) → Review → Fix → PR
-         │
-         ▼
-  Session stays open — give feedback, agents iterate
-         │
-         ▼
-  You're satisfied → done
+         |
+         v
+  Planning Chat  <-- you refine the plan with an AI architect
+         |
+         |  @build
+         v
+  Decompose --> Code --> Review --> Fix --> PR
+         |
+         v
+  Session stays open -- give feedback, agents iterate
+         |
+         v
+  You're satisfied --> done
 ```
 
-**It is not another coding agent.** It orchestrates the ones you already have installed.
+## Terminal UI
+
+When you launch `sweteam`, you're greeted with an interactive REPL:
+
+```
+╭─── sweteam v0.1.0 ─────────────────────────────────────────────────────╮
+│                                                                         │
+│        Welcome to sweteam!                │ Getting started              │
+│                                           │ /create [repo]  Start a new │
+│          ┌─────────────────┐              │ /list           See all     │
+│          │    ◉       ◉    │              │ /enter <id>     Resume      │
+│          │    ─────────    │              │ ─────────────────────────── │
+│          └─────────────────┘              │ Recent sessions             │
+│                                           │ s_a1b2c3d4 Add dark theme  │
+│      Orchestrator · v0.1.0                │ s_e5f6g7h8 Fix auth flow   │
+│      ~/projects/myrepo                    │                             │
+│                                                                         │
+╰─────────────────────────────────────────────────────────────────────────╯
+
+sweteam>
+```
+
+Inside a session, agents stream their work in real time:
+
+```
+▶ Coder ─ task-001: Add ThemeConfig and color definitions
+──────────────────────────────────────────────────────────
+│ Creating src/theme/config.ts with color palette...
+│ Adding ThemeConfig interface with light/dark variants...
+│ Defining CSS custom properties for runtime switching...
+✓ Coder completed
+
+▶ Reviewer ─ task-001: Add ThemeConfig and color definitions
+──────────────────────────────────────────────────────────
+│ Checking diff against acceptance criteria...
+│ All criteria met. Approving.
+✓ Reviewer completed
+```
 
 ## Features
 
 - **Session-based** — every interaction lives in a persistent session with full history
-- **Zero config** — discovers installed CLIs, uses their existing auth
-- **Human-in-the-loop planning** — chat with the planner, refine the plan, then hands-off
+- **Zero config** — discovers installed CLIs automatically, uses their existing auth
+- **Human-in-the-loop planning** — chat with the planner, refine the plan, then go hands-off
 - **Parallel execution** — independent tasks run concurrently across multiple agents
 - **Review loop** — built-in code review with configurable retry cycles
-- **Feedback iterations** — session stays open, you give feedback, agents iterate
+- **Feedback iterations** — session stays open; you give feedback, agents iterate on the same PR
+- **Live attach** — re-enter any session and see agent output streaming in real time
 - **Git native** — all git/GitHub operations via `git` and `gh` CLI directly
-- **Multiple agents** — supports Claude Code, Codex CLI, OpenCode, and custom CLIs
+- **Pluggable agents** — supports Claude Code, Codex CLI, OpenCode, or any custom CLI
 
 ## Prerequisites
 
@@ -94,8 +128,6 @@ npm run build
 npm link
 ```
 
-After `npm link`, the `sweteam` command is available globally on your machine.
-
 ## Quick Start
 
 ### 1. Initialize
@@ -104,7 +136,7 @@ After `npm link`, the `sweteam` command is available globally on your machine.
 sweteam init
 ```
 
-This auto-discovers your installed CLIs and generates `~/.sweteam/config.toml`:
+Auto-discovers your installed CLIs and generates `~/.sweteam/config.toml`:
 
 ```
 ✓ Found claude (Claude Code v1.x)
@@ -118,7 +150,14 @@ Generated ~/.sweteam/config.toml
 ### 2. Create a session
 
 ```bash
-sweteam create myrepo "Add dark theme with system preference detection"
+sweteam create myrepo
+```
+
+Or launch the interactive REPL and create from there:
+
+```bash
+sweteam
+sweteam> /create myrepo
 ```
 
 This will:
@@ -129,18 +168,24 @@ This will:
 
 ### 3. Plan interactively
 
-You're now chatting with the planner agent:
+You're now chatting with the planner agent. Describe your goal, ask questions, refine the approach:
 
 ```
-> I want the toggle to use Ctrl+T not just 't'
+crawlgator-ui> Add dark theme with system preference detection and a Ctrl+T toggle
 
-[agent] Good call. Updated the plan:
-        ...
-        6. Add runtime theme toggle (keybinding: Ctrl+T)
+▶ Planner ─ s_a1b2c3d4: Add dark theme
+────────────────────────────────────────
+│ I'll break this down into 6 tasks:
+│
+│ task-001: Add ThemeConfig and color definitions
+│ task-002: Implement system preference detection
+│ task-003: Create dark theme preset
+│ ...
+│
+│ Type @build when you're ready.
+✓ Planner completed
 
-        Ready to build? Type @build when ready.
-
-> @build
+crawlgator-ui> @build
 ```
 
 ### 4. Watch it build
@@ -148,7 +193,29 @@ You're now chatting with the planner agent:
 sweteam decomposes the plan into tasks, dispatches them to coding agents, reviews each result, and merges into the session branch — all autonomously.
 
 ```
-[system] Build complete.
+Plan finalized. Starting autonomous build...
+
+Found 6 tasks:
+
+  task-001  Add ThemeConfig and color definitions
+  task-002  Implement system preference detection
+  task-003  Create dark theme preset (depends on: task-001)
+  task-004  Create light theme preset (depends on: task-001)
+  task-005  Wire theme into TUI render paths (depends on: task-002, task-003, task-004)
+  task-006  Add runtime theme toggle (depends on: task-005)
+
+▶ Coder ─ task-001: Add ThemeConfig and color definitions
+──────────────────────────────────────────────────────────
+│ Creating src/theme/config.ts...
+│ ...
+✓ Coder completed
+
+▶ Reviewer ─ task-001: Add ThemeConfig and color definitions
+──────────────────────────────────────────────────────────
+│ Reviewing diff against acceptance criteria...
+✓ Reviewer completed
+
+Build complete.
 
   ✓ task-001  Add ThemeConfig and color definitions
   ✓ task-002  Implement system preference detection
@@ -157,18 +224,38 @@ sweteam decomposes the plan into tasks, dispatches them to coding agents, review
   ✓ task-005  Wire theme into TUI render paths
   ⚠ task-006  Add runtime theme toggle — ESCALATED
 
-  PR: https://github.com/YourName/myrepo/pull/42
+PR: https://github.com/YourName/myrepo/pull/42
 
-  Review the PR and type @feedback with any changes needed.
+Review the PR and type @feedback with any changes needed.
 ```
 
 ### 5. Give feedback
 
 ```
-> @feedback The dark theme colors are too muted. Make accent brighter (#00BFFF).
+crawlgator-ui> @feedback The dark theme colors are too muted. Make the accent brighter (#00BFFF).
 ```
 
 Agents pick up your feedback, iterate, and push updates to the same PR.
+
+### 6. Re-enter a session
+
+Come back later and pick up where you left off. If agents are still running, you'll see their output stream live:
+
+```bash
+sweteam enter s_a1b2c3d4
+```
+
+```
+Entered session s_a1b2c3d4 (YourName/myrepo)
+  Goal:   Add dark theme with system preference detection
+  Status: building
+
+Attaching to live build output... (press Enter to detach)
+
+▶ Coder ─ task-005: Wire theme into TUI render paths
+──────────────────────────────────────────────────────────
+│ Integrating theme provider into the component tree...
+```
 
 ## Commands
 
@@ -176,28 +263,48 @@ Agents pick up your feedback, iterate, and push updates to the same PR.
 
 | Command | Description |
 |---|---|
+| `sweteam` | Launch interactive REPL |
 | `sweteam init` | Auto-discover CLIs and generate config |
-| `sweteam create <repo> <goal>` | Create a new session |
+| `sweteam create [repo]` | Create a new session |
 | `sweteam list` | List all sessions |
 | `sweteam enter <session_id>` | Re-enter an existing session |
+| `sweteam show <session_id>` | Show detailed session status |
 | `sweteam stop <session_id>` | Stop a session |
 | `sweteam delete <session_id>` | Delete a session |
 
 ### In-session commands
 
-Once inside a session, use these `@` commands:
+Once inside a session, use `@` commands:
 
 | Command | Description |
 |---|---|
 | `@build` | Finalize plan and start autonomous coding |
-| `@status` | Show current task progress dashboard |
+| `@status` | Show task progress dashboard |
 | `@plan` | Re-display the current plan |
-| `@feedback <text>` | Give feedback on completed work |
+| `@feedback <text>` | Give feedback on completed work (triggers new iteration) |
 | `@diff` | Show cumulative diff |
 | `@pr` | Show the PR link |
-| `@tasks` | List all tasks and their statuses |
-| `@stop` | Stop this session |
+| `@tasks` | List all tasks with statuses and review info |
+| `@stop` | Stop this session and return to REPL |
 | `@help` | Show available commands |
+
+Any other text is sent directly to the planner for conversation.
+
+### REPL commands
+
+Inside the interactive REPL, use `/` commands:
+
+| Command | Description |
+|---|---|
+| `/create [repo]` | Start a new session |
+| `/list` | See all sessions |
+| `/enter <id>` | Resume a session |
+| `/show <id>` | Inspect a session |
+| `/stop <id>` | Stop a session |
+| `/delete <id>` | Delete a session |
+| `/init` | Re-run CLI discovery |
+| `/help` | Show help |
+| `/exit` | Quit |
 
 ### CLI flags
 
@@ -220,49 +327,73 @@ sweteam list --repo myrepo        # Filter by repo name
 ### Architecture
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                    sweteam CLI                        │
-├──────────┬──────────────┬──────────────┬─────────────┤
-│ Session  │   Planner    │ Orchestrator │  Reporter    │
-│ Manager  │  (chat mode) │ (autonomous) │ (TUI)        │
-├──────────┴──────────────┴──────────────┴─────────────┤
-│                 Agent Adapter Layer                    │
-│    ┌──────────┐  ┌──────────┐  ┌──────────────┐      │
-│    │ Claude   │  │ Codex    │  │ OpenCode     │      │
-│    │ Code     │  │ CLI      │  │ CLI          │      │
-│    └──────────┘  └──────────┘  └──────────────┘      │
-├──────────────────────────────────────────────────────┤
-│          SQLite (Drizzle ORM) — Session Store          │
-├──────────────────────────────────────────────────────┤
-│       Git CLI + GitHub CLI (gh) — native calls        │
-└──────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                      sweteam CLI                          │
+│                                                          │
+│  ┌──────────┐  ┌──────────────┐  ┌────────────────────┐ │
+│  │ Session  │  │   Planner    │  │   Orchestrator     │ │
+│  │ Manager  │  │  (chat mode) │  │   (autonomous)     │ │
+│  └──────────┘  └──────────────┘  └────────────────────┘ │
+│                                                          │
+│  ┌──────────────────────────────────────────────────────┐ │
+│  │              Agent Adapter Layer                     │ │
+│  │   ┌────────────┐ ┌──────────┐ ┌───────────────────┐ │ │
+│  │   │ Claude Code│ │ Codex CLI│ │ OpenCode / Custom │ │ │
+│  │   └────────────┘ └──────────┘ └───────────────────┘ │ │
+│  └──────────────────────────────────────────────────────┘ │
+│                                                          │
+│  ┌────────────────────┐  ┌─────────────────────────────┐ │
+│  │  SQLite + Drizzle  │  │  git CLI + gh CLI (native)  │ │
+│  │  (session store)   │  │  (branches, PRs, commits)   │ │
+│  └────────────────────┘  └─────────────────────────────┘ │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ### Session lifecycle
 
 ```
-/create → planning → @build → building → awaiting_feedback
-                                              │
-                                    @feedback ▼
-                                          iterating
-                                              │
-                                              ▼
-                                     awaiting_feedback (loops)
-                                              │
-                                        /stop ▼
-                                           stopped
+                    /create
+                       │
+                       v
+        ┌──────────────────────────┐
+        │        planning          │ <── chat with planner
+        └────────────┬─────────────┘
+                     │ @build
+                     v
+        ┌──────────────────────────┐
+        │        building          │ <── agents code + review
+        └────────────┬─────────────┘
+                     │
+                     v
+        ┌──────────────────────────┐
+        │    awaiting_feedback     │ <── PR created, user reviews
+        └────────────┬─────────────┘
+                     │ @feedback
+                     v
+        ┌──────────────────────────┐
+        │        iterating         │ <── agents apply feedback
+        └────────────┬─────────────┘
+                     │
+                     v
+              awaiting_feedback ─── (loops until satisfied)
+                     │
+                     │ /stop
+                     v
+        ┌──────────────────────────┐
+        │         stopped          │
+        └──────────────────────────┘
 ```
 
-### Task execution
+### Task execution pipeline
 
 1. **Plan** — the planner agent decomposes your goal into tasks with dependencies
 2. **DAG** — tasks are organized into a dependency graph
-3. **Parallel dispatch** — independent tasks run concurrently (up to `max_parallel`)
-4. **Code** — each task is assigned to a coding agent in its own git branch
+3. **Dispatch** — independent tasks run concurrently (up to `max_parallel`)
+4. **Code** — each task is assigned to a coding agent on its own git branch
 5. **Review** — a reviewer agent checks the diff against acceptance criteria
 6. **Fix loop** — if review finds issues, the coder retries (up to `max_review_cycles`)
 7. **Merge** — approved tasks are squash-merged into the session branch
-8. **PR** — the session branch is pushed and a PR is created
+8. **PR** — the session branch is pushed and a GitHub PR is created
 
 ## Configuration
 
@@ -276,7 +407,7 @@ reviewer = "claude-code"      # Which CLI reviews code
 
 [execution]
 max_parallel = 3              # Concurrent coding agents
-max_review_cycles = 3         # Review→fix loops before escalating
+max_review_cycles = 3         # Review/fix loops before escalating
 branch_prefix = "sw/"         # Prefix for all branches
 
 [git]
@@ -298,7 +429,7 @@ args = ["--non-interactive"]
 
 ### Custom agents
 
-You can add any CLI as a coding agent:
+Any CLI that accepts a prompt on stdin and writes output to stdout can be used as an agent:
 
 ```toml
 [agents.my-agent]
@@ -308,32 +439,43 @@ prompt_via = "stdin"          # stdin | arg | file
 output_from = "stdout"        # stdout | file
 ```
 
+Then reference it in your roles:
+
+```toml
+[roles]
+coder = "my-agent"
+```
+
 ## Data storage
 
-All data is local:
+All data is stored locally:
 
 ```
 ~/.sweteam/
 ├── sweteam.db          # SQLite database (sessions, tasks, messages)
-├── config.toml         # Global config
-└── repos/              # Cloned repos
+├── config.toml         # Global configuration
+├── logs/               # Agent output logs (for live attach)
+│   └── s_a1b2c3d4.jsonl
+└── repos/              # Cloned repositories
     └── YourName--myrepo/
 ```
 
-- **No API keys stored** — coding CLIs manage their own auth
-- **No network calls** — sweteam itself makes zero API requests
-- **Full audit trail** — every prompt and response is stored per session
+- **No API keys stored** — coding CLIs manage their own authentication
+- **No network calls** — sweteam itself makes zero API requests; only the underlying agents and git/gh do
+- **Full audit trail** — every prompt, response, and system event is stored per session
 
 ## Development
 
 ```bash
-# Clone and install
 git clone https://github.com/SiluPanda/sweteam.git
 cd sweteam
 npm install
 
-# Run in dev mode (no build needed)
-npm run dev -- create myrepo "my goal"
+# Run in dev mode (no build step)
+npm run dev
+
+# Run with subcommands
+npm run dev -- create myrepo
 
 # Run tests
 npm test
@@ -345,19 +487,57 @@ npm run build
 npm link
 ```
 
-## Tech Stack
+### Project structure
+
+```
+src/
+├── index.ts                 # CLI entry point (Commander.js)
+├── repl/                    # Interactive REPL loop
+├── session/                 # Session manager, state machine, agent log
+├── planner/                 # Planner agent and plan parser
+├── orchestrator/            # Task runner, reviewer, build/feedback handlers
+├── adapters/                # Agent adapters (claude-code, codex, opencode, custom)
+├── commands/                # CLI subcommands (create, list, enter, etc.)
+├── config/                  # Config loader and GitHub auth
+├── git/                     # Git and GitHub CLI wrappers
+├── ui/                      # Terminal UI (banner, prompt, agent panel, markdown)
+├── db/                      # SQLite schema and client (Drizzle ORM)
+└── __tests__/               # Test suite
+```
+
+### Tech stack
 
 | Component | Choice |
 |---|---|
-| Language | TypeScript (Node.js) |
+| Language | TypeScript (ESM, Node.js 18+) |
 | ORM | Drizzle |
-| Database | SQLite (better-sqlite3) |
-| TUI | Ink (React for CLI) |
+| Database | SQLite via better-sqlite3 |
 | CLI framework | Commander.js |
-| Git | `git` + `gh` CLI directly |
+| Terminal UI | Custom (chalk, raw-mode prompt) |
+| Git | `git` + `gh` CLI (child process) |
 | IDs | nanoid |
 | Config | TOML |
+| Tests | Vitest |
+
+## Contributing
+
+Contributions are welcome. Please open an issue first to discuss what you'd like to change.
+
+```bash
+# Fork and clone
+git clone https://github.com/your-name/sweteam.git
+cd sweteam
+npm install
+
+# Create a branch
+git checkout -b feat/my-feature
+
+# Make changes, run tests
+npm test
+
+# Submit a PR
+```
 
 ## License
 
-MIT
+[MIT](LICENSE)

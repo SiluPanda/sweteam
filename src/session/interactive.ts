@@ -8,6 +8,7 @@ import { handleBuild } from "../orchestrator/build-handler.js";
 import { handleFeedback } from "../orchestrator/feedback-handler.js";
 import { transition } from "./state-machine.js";
 import { AgentPanel } from "../ui/agent-panel.js";
+import { writeEvent } from "./agent-log.js";
 import {
   getStatusDisplay,
   getPlanDisplay,
@@ -53,7 +54,9 @@ export function createSessionHandlers(
   goal: string,
   repoPath: string,
 ): SessionHandlers {
-  let lastPlannerResponse = "";
+  // Hydrate lastPlannerResponse from DB so @build works after re-entry
+  const existingSession = getSession(sessionId);
+  let lastPlannerResponse = existingSession?.planJson ?? "";
   let currentGoal = goal;
 
   return {
@@ -68,17 +71,27 @@ export function createSessionHandlers(
           .run();
       }
 
-      // If session is stuck in building (e.g. after a failed/timed-out build),
-      // transition back to planning so the user can iterate with the planner.
+      // Route based on session status
       const session = getSession(sessionId);
       if (session?.status === "building") {
-        transition(sessionId, "planning");
+        // Build was interrupted — treat message as feedback on the interrupted build
+        transition(sessionId, "awaiting_feedback");
+        await handleFeedback(sessionId, text);
+        return;
+      }
+      if (session?.status === "awaiting_feedback") {
+        // Already awaiting feedback — route directly to feedback handler
+        await handleFeedback(sessionId, text);
+        return;
       }
 
+      // Default: planning — invoke planner
       addMessage(sessionId, "user", text, { phase: "planning" });
 
       const panel = new AgentPanel();
-      panel.addAgent("planner", "Planner", sessionId, currentGoal);
+      const plannerId = "planner";
+      panel.addAgent(plannerId, "Planner", sessionId, currentGoal);
+      writeEvent(sessionId, { type: "agent-start", id: plannerId, role: "Planner", taskId: sessionId, title: currentGoal });
 
       try {
         const response = await invokePlanner(
@@ -87,10 +100,12 @@ export function createSessionHandlers(
           currentGoal,
           repoPath,
           (chunk) => {
-            panel.appendOutput("planner", chunk);
+            panel.appendOutput(plannerId, chunk);
+            writeEvent(sessionId, { type: "output", id: plannerId, chunk });
           },
         );
-        panel.completeAgent("planner", true);
+        panel.completeAgent(plannerId, true);
+        writeEvent(sessionId, { type: "agent-end", id: plannerId, success: true });
         panel.destroy();
 
         if (!response.trim()) {
@@ -100,7 +115,8 @@ export function createSessionHandlers(
         lastPlannerResponse = response;
         addMessage(sessionId, "agent", response, { phase: "planning" });
       } catch (err) {
-        panel.completeAgent("planner", false);
+        panel.completeAgent(plannerId, false);
+        writeEvent(sessionId, { type: "agent-end", id: plannerId, success: false });
         panel.destroy();
 
         const msg = err instanceof Error ? err.message : String(err);
@@ -112,10 +128,16 @@ export function createSessionHandlers(
 
     onBuild: async (): Promise<void> => {
       if (!lastPlannerResponse) {
-        console.log(
-          "No plan generated yet. Chat with the planner first, then type @build.",
-        );
-        return;
+        // Try loading plan from DB as a fallback (e.g. after session re-entry)
+        const s = getSession(sessionId);
+        if (s?.planJson) {
+          lastPlannerResponse = s.planJson;
+        } else {
+          console.log(
+            "No plan generated yet. Chat with the planner first, then type @build.",
+          );
+          return;
+        }
       }
 
       console.log("\nPlan finalized. Starting autonomous build...\n");

@@ -1,3 +1,4 @@
+import { existsSync } from "fs";
 import { listSessions } from "../session/manager.js";
 import { renderBanner, type RecentSession } from "../ui/banner.js";
 import { promptLine } from "../ui/prompt.js";
@@ -6,6 +7,9 @@ import {
   handleSessionCommand,
   type SessionHandlers,
 } from "../session/interactive.js";
+import { getStatusDisplay } from "../session/in-session-commands.js";
+import { watchLog, getLogPath, type AgentEvent } from "../session/agent-log.js";
+import { AgentPanel } from "../ui/agent-panel.js";
 
 // ── Active session state ────────────────────────────────────────────
 
@@ -134,6 +138,64 @@ export function getCompletions(line: string): string[] {
   return [];
 }
 
+// ── Live build output watcher ────────────────────────────────────────
+
+/**
+ * Attach to a running build's agent log and display output via AgentPanel.
+ * Blocks until the build completes or the user presses Enter/Ctrl-C.
+ */
+function watchBuildLive(sessionId: string): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const panel = new AgentPanel();
+    let resolved = false;
+
+    function finish() {
+      if (resolved) return;
+      resolved = true;
+      watcher.stop();
+      panel.destroy();
+      process.stdin.removeListener("data", onKey);
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode!(false);
+      }
+      process.stdin.pause();
+      resolve();
+    }
+
+    const watcher = watchLog(sessionId, (event: AgentEvent) => {
+      switch (event.type) {
+        case "agent-start":
+          panel.addAgent(event.id, event.role!, event.taskId!, event.title!);
+          break;
+        case "output":
+          panel.appendOutput(event.id, event.chunk!);
+          break;
+        case "agent-end":
+          panel.completeAgent(event.id, event.success!);
+          break;
+        case "build-complete":
+          finish();
+          break;
+      }
+    });
+
+    // Let user press Enter or Ctrl-C to detach
+    function onKey(data: Buffer) {
+      const key = data.toString();
+      if (key === "\r" || key === "\n" || key === "\x03") {
+        console.log("\nDetached from build output.\n");
+        finish();
+      }
+    }
+
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode!(true);
+    }
+    process.stdin.resume();
+    process.stdin.on("data", onKey);
+  });
+}
+
 // ── Dispatch (/ commands) ───────────────────────────────────────────
 
 async function dispatch(command: string, args: string[]): Promise<void> {
@@ -189,6 +251,34 @@ async function dispatch(command: string, args: string[]): Promise<void> {
       console.log(`\nEntered session ${session.id} (${session.repo})`);
       console.log(`  Goal:   ${session.goal || "(not set yet)"}`);
       console.log(`  Status: ${session.status}\n`);
+
+      // Status-aware guidance on re-entry
+      if (session.status === "building" || session.status === "iterating") {
+        // Check if there's a live log file with agent output
+        const logPath = getLogPath(session.id);
+        if (existsSync(logPath)) {
+          console.log("Attaching to live build output... (press Enter to detach)\n");
+          await watchBuildLive(session.id);
+          // Re-check status after watching — build may have completed
+          const updated = getSession(session.id);
+          if (updated && updated.status === "awaiting_feedback") {
+            console.log("Build complete. Send feedback or @feedback <text>.\n");
+          } else if (updated && updated.status === "building") {
+            console.log(getStatusDisplay(session.id));
+            console.log("\nBuild still in progress. Re-enter to reattach, or type @build to restart.\n");
+          }
+        } else {
+          console.log(getStatusDisplay(session.id));
+          console.log("Build was interrupted. Type @build to restart.\n");
+        }
+      } else if (session.status === "awaiting_feedback") {
+        console.log(getStatusDisplay(session.id));
+        console.log("Send feedback or @feedback <text>.\n");
+      } else if (session.status === "planning" && session.planJson) {
+        console.log("A plan exists. Type @build or continue chatting.\n");
+      } else if (session.status === "planning") {
+        console.log("Describe what you want to build.\n");
+      }
       break;
     }
     case "/show": {
