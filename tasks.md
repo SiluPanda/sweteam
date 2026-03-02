@@ -168,22 +168,22 @@ All tasks are in logical execution order. Each task should be small and self-con
 ### Task 26: Implement session creation logic
 - Create `src/session/manager.ts`
 - `createSession(repo, goal)`: resolve repo, clone/locate, generate nanoid, create working branch, insert into DB, insert system message
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 27: Implement session retrieval and listing
 - Add `getSession(id)`, `listSessions()` to session manager
 - `listSessions()` returns all sessions with id, repo, goal, status
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 28: Implement session stop and delete
 - Add `stopSession(id)` — set status to `stopped`, set `stoppedAt`
 - Add `deleteSession(id)` — delete session and all related data (cascade)
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 29: Implement message persistence helpers
 - Add `addMessage(sessionId, role, content, metadata)` to session manager
 - Add `getMessages(sessionId, limit?)` to retrieve chat history
-- **Status:** OPEN
+- **Status:** DONE
 
 ---
 
@@ -193,20 +193,20 @@ All tasks are in logical execution order. Each task should be small and self-con
 - Create `src/index.ts`
 - Set up Commander program with name, description, version
 - Add shebang line for bin execution
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 31: Implement `/create` command handler
 - Create `src/commands/create.ts`
 - Parse `<repo>` and `<goal>` arguments
 - Call session manager to create session
 - Transition into planning chat
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 32: Implement `/list` command handler
 - Create `src/commands/list.ts`
 - Fetch all sessions from DB
 - Render formatted table output (as per spec section 5.4)
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 33: Implement `/enter` command handler
 - Create `src/commands/enter.ts`
@@ -214,17 +214,17 @@ All tasks are in logical execution order. Each task should be small and self-con
 - Display session summary (repo, goal, status, PR, tasks, last activity)
 - Display last 10 messages
 - Enter interactive session loop
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 34: Implement `/stop` command handler
 - Wire `/stop` to session manager's `stopSession()`
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 35: Implement `/delete` command handler
 - Create `src/commands/delete.ts`
 - Confirm with user before deleting
 - Call session manager's `deleteSession()`
-- **Status:** OPEN
+- **Status:** DONE
 
 ---
 
@@ -236,7 +236,7 @@ All tasks are in logical execution order. Each task should be small and self-con
 - Detect `@build` command to exit planning and trigger build
 - Detect `@stop`, `@help`, `@plan` commands
 - For regular messages: send to planner agent, display response, persist both
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 37: Implement planner agent orchestration
 - Create `src/planner/planner.ts`
@@ -244,20 +244,20 @@ All tasks are in logical execution order. Each task should be small and self-con
 - Gather repo context: file tree, package manifest, recent commits
 - Send prompt + chat history to configured planner CLI via adapter
 - Return agent response
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 38: Implement repo context gathering
 - Add helpers to gather filtered file tree (exclude node_modules, .git, etc.)
 - Read package manifest (package.json / Cargo.toml / etc.)
 - Get last 20 commits via `git log --oneline -20`
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 39: Implement plan parser
 - Create `src/planner/plan-parser.ts`
 - Parse agent's task breakdown output into structured `Task[]` objects
 - Extract: id, title, description, files_likely_touched, depends_on, acceptance_criteria
 - Handle both JSON and markdown formatted responses
-- **Status:** OPEN
+- **Status:** DONE
 
 ---
 
@@ -266,12 +266,12 @@ All tasks are in logical execution order. Each task should be small and self-con
 ### Task 40: Implement single task runner
 - Create `src/orchestrator/task-runner.ts`
 - For a given task: create task branch from session branch, build coder prompt, invoke coder adapter, capture output, capture diff, commit, update DB
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 41: Build coder task prompt
 - Implement prompt template from spec section 11 (Coder Task Prompt)
 - Include task title, description, acceptance criteria, files, context diffs from dependency tasks
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 42: Implement review step for a task
 - Build reviewer prompt from spec section 11 (Reviewer Prompt)
@@ -279,20 +279,20 @@ All tasks are in logical execution order. Each task should be small and self-con
 - Parse JSON response (verdict + issues)
 - On `approve` → proceed to merge
 - On `request_changes` → re-invoke coder with issues, loop up to `max_review_cycles`
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 43: Implement task merge step
 - After review approval: squash-merge task branch into session branch
 - Delete task branch
 - Update task status to `done` in DB
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 44: Implement sequential orchestrator
 - Create `src/orchestrator/orchestrator.ts`
 - Take finalized plan, insert tasks into DB
 - Execute tasks sequentially in dependency order
 - Handle failed tasks: mark as `failed`, mark dependents as `blocked`
-- **Status:** OPEN
+- **Status:** DONE
 
 ---
 
@@ -302,24 +302,24 @@ All tasks are in logical execution order. Each task should be small and self-con
 - On `@build`: save plan JSON to session, transition status to `building`
 - Parse plan into tasks, insert into DB
 - Kick off orchestrator
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 46: Implement PR creation after build
 - After all tasks complete (or all possible tasks done): push session branch
 - Create PR via `gh pr create` with title from goal and generated body
 - Store PR URL and number in session
 - Transition to `awaiting_feedback`
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 47: Generate PR body
 - Build markdown PR body from completed tasks, their diffs, and any escalation notes
 - Include task list with status checkmarks
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 48: Implement build completion report
 - Print summary to chat: tasks done/failed/escalated, PR link
 - Store as system message in session
-- **Status:** OPEN
+- **Status:** DONE
 
 ---
 
@@ -329,30 +329,30 @@ All tasks are in logical execution order. Each task should be small and self-con
 - Create `src/orchestrator/feedback-handler.ts`
 - Store feedback as user message + new iteration record
 - Transition session to `iterating`
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 50: Implement feedback iteration prompt
 - Build iteration prompt from spec section 11 (Feedback Iteration Prompt)
 - Include original plan, current task states/diffs, feedback text, iteration history
 - Send to planner adapter, get plan delta
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 51: Implement plan delta processing
 - Parse plan delta JSON (modified_tasks, new_tasks)
 - Update modified tasks in DB
 - Insert new tasks in DB
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 52: Implement incremental build from plan delta
 - Re-run orchestrator on modified + new tasks only
 - Push updates to existing PR branch
 - Transition back to `awaiting_feedback`
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 53: Implement iteration record tracking
 - Insert iteration into `iterations` table with iteration number, feedback, plan delta, status
 - Update iteration status as it progresses
-- **Status:** OPEN
+- **Status:** DONE
 
 ---
 
@@ -361,17 +361,17 @@ All tasks are in logical execution order. Each task should be small and self-con
 ### Task 54: Test and validate Codex adapter end-to-end
 - Verify Codex adapter works with real `codex` CLI
 - Handle any output format differences
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 55: Test and validate OpenCode adapter end-to-end
 - Verify OpenCode adapter works with real `opencode` CLI
 - Handle any output format differences
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 56: Test custom adapter with a sample config
 - Verify custom adapter correctly reads config and spawns arbitrary CLI
 - Test stdin/arg/file prompt delivery modes
-- **Status:** OPEN
+- **Status:** DONE
 
 ---
 
@@ -380,29 +380,29 @@ All tasks are in logical execution order. Each task should be small and self-con
 ### Task 57: Implement agent timeout handling
 - Add configurable timeout to adapter execute calls
 - On timeout: retry once, then mark task `failed`
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 58: Implement agent error handling (non-zero exit)
 - Capture stderr on non-zero exit
 - Retry once with error context appended to prompt
 - On second failure: mark task `failed`, store error in agent_output
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 59: Implement dependency failure propagation
 - When a task fails, mark all downstream dependent tasks as `blocked`
 - Continue executing non-blocked tasks
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 60: Implement merge conflict handling
 - Detect merge conflicts during squash-merge
 - Attempt auto-resolve by sending conflict to coder agent
 - On failure: escalate task, continue others
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 61: Persist all errors as system messages
 - Every error/escalation gets stored as a `system` role message in the session
 - User sees full error history when they `/enter`
-- **Status:** OPEN
+- **Status:** DONE
 
 ---
 
@@ -412,18 +412,18 @@ All tasks are in logical execution order. Each task should be small and self-con
 - Parse `depends_on` fields into a directed acyclic graph
 - Implement topological sort
 - Identify tasks with no unmet dependencies (ready to run)
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 63: Implement parallel task dispatcher
 - Run up to `max_parallel` tasks concurrently
 - When a task completes, check if new tasks are unblocked
 - Dispatch newly unblocked tasks
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 64: Handle concurrent git branch operations
 - Ensure parallel tasks use separate task branches safely
 - Handle concurrent merges into session branch (serialize merge step)
-- **Status:** OPEN
+- **Status:** DONE
 
 ---
 
@@ -431,27 +431,27 @@ All tasks are in logical execution order. Each task should be small and self-con
 
 ### Task 65: Implement @status command
 - Show current task progress: task list with statuses, progress bar
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 66: Implement @plan command
 - Re-display the current plan from `planJson` in session
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 67: Implement @diff command
 - Show cumulative diff: `git diff main...{session_branch}`
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 68: Implement @pr command
 - Display PR URL from session, or "No PR created yet"
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 69: Implement @tasks command
 - List all tasks with their statuses, review verdicts, and cycle counts
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 70: Implement @help command
 - Print all available in-session commands with descriptions
-- **Status:** OPEN
+- **Status:** DONE
 
 ---
 
@@ -461,18 +461,18 @@ All tasks are in logical execution order. Each task should be small and self-con
 - Create `src/tui/chat-ui.ts`
 - Scrollable message list with role-based coloring (user/agent/system)
 - Input field at bottom
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 72: Implement Ink-based task dashboard component
 - Create `src/tui/dashboard.ts`
 - Real-time task status display with progress indicators
 - Show running/queued/done/failed counts
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 73: Implement Ink-based session list component
 - Create `src/tui/session-list.ts`
 - Formatted table of sessions (matches spec section 5.4 layout)
-- **Status:** OPEN
+- **Status:** DONE
 
 ---
 
@@ -481,28 +481,28 @@ All tasks are in logical execution order. Each task should be small and self-con
 ### Task 74: Add CLI flag overrides
 - Support `--coder`, `--reviewer`, `--parallel`, `--config` flags on sweteam command
 - Merge CLI flags over config file values
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 75: Implement session resume from stopped state
 - On `/enter` a stopped session: allow `@build` or `@feedback` to resume
 - Correctly transition from `stopped` back to `building` or `iterating`
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 76: Add npm bin entry and build script
 - Configure `package.json` `bin` field pointing to compiled entry point
 - Add `build` script (tsc)
 - Add `start` / `dev` scripts
 - Test `npx sweteam` and global install
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 77: Validate gh authentication on startup
 - Check `gh auth status` before any operation that needs it
 - Display clear error message if not authenticated
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 78: Implement session search/filter
 - Add `--status` and `--repo` filters to `/list` command
-- **Status:** OPEN
+- **Status:** DONE
 
 ---
 
@@ -511,14 +511,14 @@ All tasks are in logical execution order. Each task should be small and self-con
 ### Task 79: Implement test runner integration
 - After code generation, run project test suite as part of review
 - Parse test results, feed failures back to coder
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 80: Implement cost tracking per session
 - Track number of agent invocations and token counts (if available from CLI output)
 - Store per-session, display in session summary
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 81: Export session as markdown report
 - Generate a markdown document summarizing: goal, plan, tasks, diffs, PR link, iterations
 - Save to file or print to stdout
-- **Status:** OPEN
+- **Status:** DONE
