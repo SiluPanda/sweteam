@@ -19,7 +19,7 @@ All tasks are in logical execution order. Each task should be small and self-con
 ### Task 3: Install core dependencies
 - Install production deps: `drizzle-orm`, `better-sqlite3`, `nanoid`, `@iarna/toml`, `commander`, `ink`, `react`
 - Install dev deps: `typescript`, `@types/better-sqlite3`, `@types/node`, `drizzle-kit`, `tsx`
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 4: Create project directory structure
 - Create all directories: `src/commands`, `src/session`, `src/planner`, `src/orchestrator`, `src/adapters`, `src/git`, `src/db`, `src/tui`, `src/config`
