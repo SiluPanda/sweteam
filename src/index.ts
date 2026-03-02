@@ -9,7 +9,11 @@ program
   .description(
     "Autonomous coding agent orchestrator — turns high-level goals into PR'd code",
   )
-  .version("0.1.0");
+  .version("0.1.0")
+  .option("--coder <agent>", "Override coder agent for this session")
+  .option("--reviewer <agent>", "Override reviewer agent for this session")
+  .option("--parallel <count>", "Override max parallel tasks", parseInt)
+  .option("--config <path>", "Use custom config file path");
 
 program
   .command("create")
@@ -24,9 +28,11 @@ program
 program
   .command("list")
   .description("List all sessions with status")
-  .action(async () => {
+  .option("--status <status>", "Filter by session status")
+  .option("--repo <repo>", "Filter by repository name")
+  .action(async (opts: { status?: string; repo?: string }) => {
     const { handleList } = await import("./commands/list.js");
-    await handleList();
+    await handleList(opts);
   });
 
 program
