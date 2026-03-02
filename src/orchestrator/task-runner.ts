@@ -15,6 +15,7 @@ export interface TaskRecord {
   dependsOn: string | null;
   branchName: string | null;
   status: string;
+  diffPatch?: string | null;
 }
 
 export function buildCoderPrompt(
