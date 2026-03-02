@@ -24,7 +24,7 @@ All tasks are in logical execution order. Each task should be small and self-con
 ### Task 4: Create project directory structure
 - Create all directories: `src/commands`, `src/session`, `src/planner`, `src/orchestrator`, `src/adapters`, `src/git`, `src/db`, `src/tui`, `src/config`
 - Create placeholder `index.ts` files where needed
-- **Status:** OPEN
+- **Status:** DONE
 
 ---
 
