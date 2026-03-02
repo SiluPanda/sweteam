@@ -55,3 +55,16 @@ export function squashMerge(
   git(`commit -m "${message.replace(/"/g, '\\"')}"`, cwd);
   git(`branch -D ${source}`, cwd);
 }
+
+export function getDiff(cwd: string): string {
+  return git("diff", cwd);
+}
+
+export function getStagedDiff(cwd: string): string {
+  return git("diff --cached", cwd);
+}
+
+export function commitAll(message: string, cwd: string): void {
+  git("add -A", cwd);
+  git(`commit -m "${message.replace(/"/g, '\\"')}"`, cwd);
+}
