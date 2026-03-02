@@ -14,7 +14,7 @@ All tasks are in logical execution order. Each task should be small and self-con
 ### Task 2: Set up TypeScript configuration
 - Create `tsconfig.json` with strict mode, ES2022 target, Node module resolution
 - Add `tsx` as dev dependency for development execution
-- **Status:** OPEN
+- **Status:** DONE
 
 ### Task 3: Install core dependencies
 - Install production deps: `drizzle-orm`, `better-sqlite3`, `nanoid`, `@iarna/toml`, `commander`, `ink`, `react`

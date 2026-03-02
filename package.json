@@ -17,5 +17,8 @@
     "orchestrator",
     "ai"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "tsx": "^4.7.0"
+  }
 }
