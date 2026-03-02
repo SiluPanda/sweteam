@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import { MarkdownRenderer } from "./markdown.js";
 
 const border = chalk.blue;
 const iconRunning = chalk.blue("▶");
@@ -12,6 +13,10 @@ interface AgentSlot {
   status: "running" | "done" | "failed";
   /** True when the last chunk didn't end with a newline. */
   midLine: boolean;
+  /** Accumulated text for the current incomplete line. */
+  lineBuffer: string;
+  /** Markdown renderer scoped to this agent's output. */
+  renderer: MarkdownRenderer;
 }
 
 export class AgentPanel {
@@ -26,6 +31,8 @@ export class AgentPanel {
       role,
       status: "running",
       midLine: false,
+      lineBuffer: "",
+      renderer: new MarkdownRenderer(),
     };
     this.slots.set(id, slot);
     this.activeId = id;
@@ -41,15 +48,15 @@ export class AgentPanel {
 
     const prefix = border("│ ");
 
-    // Process chunk character-by-character for correct line handling
     let i = 0;
     while (i < chunk.length) {
       const nlIdx = chunk.indexOf("\n", i);
 
       if (nlIdx === -1) {
-        // No more newlines — partial line
+        // No newline remaining — show immediately for streaming feel
         const segment = chunk.slice(i);
         if (segment.length > 0) {
+          slot.lineBuffer += segment;
           if (!slot.midLine) {
             process.stdout.write(prefix);
           }
@@ -59,12 +66,22 @@ export class AgentPanel {
         break;
       }
 
-      // There's a newline at nlIdx
+      // Complete line available
       const segment = chunk.slice(i, nlIdx).replace(/\r$/, "");
-      if (!slot.midLine) {
-        process.stdout.write(prefix);
+      const fullLine = slot.lineBuffer + segment;
+
+      // Always pass through renderer to keep state (code block tracking) in sync
+      const rendered = slot.renderer.renderLine(fullLine);
+
+      if (slot.midLine) {
+        // Already showed partial content raw — just finish the line
+        process.stdout.write(segment + "\n");
+      } else {
+        // Full line arrived at once — show the markdown-rendered version
+        process.stdout.write(prefix + rendered + "\n");
       }
-      process.stdout.write(segment + "\n");
+
+      slot.lineBuffer = "";
       slot.midLine = false;
       i = nlIdx + 1;
     }
@@ -77,8 +94,9 @@ export class AgentPanel {
     slot.status = success ? "done" : "failed";
 
     // Flush any partial line
-    if (slot.midLine) {
+    if (slot.midLine || slot.lineBuffer) {
       process.stdout.write("\n");
+      slot.lineBuffer = "";
       slot.midLine = false;
     }
 
