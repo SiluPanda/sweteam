@@ -1,12 +1,40 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "../db/client.js";
 import { sessions, tasks as tasksTable } from "../db/schema.js";
-import { git } from "../git/git.js";
+import { git, getDefaultBranch } from "../git/git.js";
 import { displayTaskId } from "../orchestrator/orchestrator.js";
+
+// Human-readable labels for session statuses
+const STATE_LABELS: Record<string, string> = {
+  planning: "Planning",
+  building: "Building",
+  awaiting_feedback: "Awaiting feedback",
+  iterating: "Iterating",
+  stopped: "Stopped",
+};
 
 // @status — Task progress with summary
 export function getStatusDisplay(sessionId: string): string {
   const db = getDb();
+
+  // Prepend session state and goal
+  const sessionRows = db
+    .select({ status: sessions.status, goal: sessions.goal })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .all();
+
+  const headerLines: string[] = [];
+  if (sessionRows.length > 0) {
+    const s = sessionRows[0];
+    const label = STATE_LABELS[s.status as string] ?? s.status;
+    headerLines.push(`Session: ${label}`);
+    if (s.goal) {
+      headerLines.push(`Goal:    ${s.goal}`);
+    }
+    headerLines.push("");
+  }
+
   const taskRows = db
     .select({
       id: tasksTable.id,
@@ -19,7 +47,7 @@ export function getStatusDisplay(sessionId: string): string {
     .all();
 
   if (taskRows.length === 0) {
-    return "No tasks yet. Finalize the plan and type @build.";
+    return headerLines.join("\n") + "No tasks yet. Finalize the plan and type @build.";
   }
 
   const counts = {
@@ -32,7 +60,7 @@ export function getStatusDisplay(sessionId: string): string {
     blocked: 0,
   };
 
-  const lines: string[] = ["Task Status:"];
+  const lines: string[] = [...headerLines, "Task Status:"];
 
   for (const task of taskRows) {
     const status = task.status as keyof typeof counts;
@@ -126,8 +154,9 @@ export function getDiffDisplay(sessionId: string): string {
   }
 
   try {
+    const defaultBranch = getDefaultBranch(rows[0].repoLocalPath);
     const diff = git(
-      `diff main...${rows[0].workingBranch}`,
+      ["diff", `${defaultBranch}...${rows[0].workingBranch}`],
       rows[0].repoLocalPath,
     );
     return diff || "No changes yet.";
@@ -184,18 +213,53 @@ export function getTasksDisplay(sessionId: string): string {
 }
 
 // @help
-export function getHelpDisplay(): string {
-  return [
-    "Available in-session commands:",
-    "",
-    "  @build      Finalize plan and start autonomous coding",
-    "  @status     Show current task progress dashboard",
-    "  @plan       Re-display the current plan",
-    "  @feedback   Give feedback on completed work (triggers new iteration)",
-    "  @diff       Show the current cumulative diff",
-    "  @pr         Show the PR link",
-    "  @tasks      List all tasks and their statuses",
-    "  @stop       Stop this session",
-    "  @help       Show this help message",
-  ].join("\n");
+export function getHelpDisplay(sessionId?: string): string {
+  let status: string | null = null;
+
+  if (sessionId) {
+    const db = getDb();
+    const rows = db
+      .select({ status: sessions.status })
+      .from(sessions)
+      .where(eq(sessions.id, sessionId))
+      .all();
+    if (rows.length > 0) {
+      status = rows[0].status as string;
+    }
+  }
+
+  const na = " (not applicable now)";
+
+  const lines: string[] = [];
+
+  if (status) {
+    lines.push(`Session state: ${STATE_LABELS[status] ?? status}`);
+    lines.push("");
+  }
+
+  lines.push("Session commands (@ prefix):");
+  lines.push("");
+
+  // @build only relevant during planning
+  const buildNote = status && status !== "planning" ? na : "";
+  lines.push(`  @build      Finalize plan and start autonomous coding${buildNote}`);
+
+  lines.push("  @status     Show current task progress dashboard");
+  lines.push("  @plan       Re-display the current plan");
+
+  // @feedback only relevant when awaiting feedback or after build
+  const fbNote = status && !["awaiting_feedback", "building"].includes(status) ? na : "";
+  lines.push(`  @feedback   Give feedback on completed work${fbNote}`);
+
+  lines.push("  @diff       Show the current cumulative diff");
+  lines.push("  @pr         Show the PR link");
+  lines.push("  @tasks      List all tasks and their statuses");
+  lines.push("  @stop       Stop this session");
+  lines.push("  @help       Show this help message");
+  lines.push("");
+  lines.push("  Escape      Leave session (back to sweteam>)");
+  lines.push("");
+  lines.push("Any other text is sent to the planner.");
+
+  return lines.join("\n");
 }

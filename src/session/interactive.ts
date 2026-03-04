@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "../db/client.js";
 import { sessions } from "../db/schema.js";
-import { getHelpText } from "./chat.js";
 import { stopSession, addMessage, getSession } from "./manager.js";
 import { invokePlanner } from "../planner/planner.js";
 import { handleBuild } from "../orchestrator/build-handler.js";
@@ -9,12 +8,14 @@ import { handleFeedback } from "../orchestrator/feedback-handler.js";
 import { transition } from "./state-machine.js";
 import { AgentPanel } from "../ui/agent-panel.js";
 import { writeEvent } from "./agent-log.js";
+import { friendlyError } from "../orchestrator/error-handling.js";
 import {
   getStatusDisplay,
   getPlanDisplay,
   getDiffDisplay,
   getPrDisplay,
   getTasksDisplay,
+  getHelpDisplay,
 } from "./in-session-commands.js";
 
 /**
@@ -120,7 +121,7 @@ export function createSessionHandlers(
         panel.destroy();
 
         const msg = err instanceof Error ? err.message : String(err);
-        const errResponse = `Error invoking planner: ${msg}`;
+        const errResponse = `Error invoking planner: ${friendlyError(msg)}`;
         console.error("\n" + errResponse + "\n");
         addMessage(sessionId, "agent", errResponse, { phase: "planning" });
       }
@@ -141,13 +142,19 @@ export function createSessionHandlers(
       }
 
       console.log("\nPlan finalized. Starting autonomous build...\n");
-      try {
-        await handleBuild(sessionId, lastPlannerResponse);
-      } catch (err) {
+
+      // Run build in the background so the REPL stays responsive.
+      // The user sees output via the agent log watcher and can
+      // detach (Escape/Enter) and reattach (/enter) freely.
+      const planSnapshot = lastPlannerResponse;
+      handleBuild(sessionId, planSnapshot).catch((err) => {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`Build failed: ${msg}`);
+        console.error(`\nBuild failed: ${friendlyError(msg)}\n`);
         addMessage(sessionId, "system", `Build failed: ${msg}`);
-      }
+      });
+
+      // Give the build a moment to start writing events, then attach
+      await new Promise((r) => setTimeout(r, 300));
     },
 
     onStop: async (): Promise<void> => {
@@ -189,7 +196,7 @@ export function createSessionHandlers(
     },
 
     onHelp: (): void => {
-      console.log(getHelpText());
+      console.log(getHelpDisplay(sessionId));
     },
   };
 }

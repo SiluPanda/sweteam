@@ -28,7 +28,9 @@ export function scopeTaskId(sessionId: string, planTaskId: string): string {
 /** Strip the session prefix from a scoped task ID for user-facing display. */
 export function displayTaskId(dbId: string): string {
   const idx = dbId.indexOf(":");
-  return idx >= 0 ? dbId.slice(idx + 1) : dbId;
+  const raw = idx >= 0 ? dbId.slice(idx + 1) : dbId;
+  // Strip any residual markdown formatting (e.g. **1** → 1)
+  return raw.replace(/\*\*(.+?)\*\*/g, "$1").replace(/`([^`]+)`/g, "$1");
 }
 
 export function insertTasksFromPlan(
@@ -204,7 +206,7 @@ export async function runOrchestrator(
       addMessage(
         sessionId,
         "system",
-        `Task ${displayTaskId(task.id)} failed: ${result.output.slice(0, 200)}`,
+        `Task ${displayTaskId(task.id)} failed: ${result.output.slice(0, 500)}`,
       );
       continue;
     }

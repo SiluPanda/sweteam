@@ -12,7 +12,7 @@ export type SessionStatus =
 const VALID_TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
   planning: ["building", "stopped"],
   building: ["building", "awaiting_feedback", "planning", "stopped"],
-  awaiting_feedback: ["iterating", "stopped"],
+  awaiting_feedback: ["building", "iterating", "stopped"],
   iterating: ["awaiting_feedback", "stopped"],
   stopped: ["building", "iterating"],
 };
@@ -56,4 +56,14 @@ export function transition(sessionId: string, newStatus: SessionStatus): void {
   }
 
   db.update(sessions).set(updates).where(eq(sessions.id, sessionId)).run();
+
+  const stateLabels: Record<string, string> = {
+    planning: "Planning",
+    building: "Building",
+    awaiting_feedback: "Awaiting feedback",
+    iterating: "Iterating",
+    stopped: "Stopped",
+  };
+  const label = stateLabels[newStatus] ?? newStatus;
+  console.log(`[${label}]`);
 }

@@ -1,15 +1,16 @@
 import { existsSync } from "fs";
-import { listSessions } from "../session/manager.js";
+import { listSessions, getSession } from "../session/manager.js";
 import { renderBanner, type RecentSession } from "../ui/banner.js";
-import { promptLine } from "../ui/prompt.js";
+import { promptLine, ESCAPE_SIGNAL } from "../ui/prompt.js";
 import {
   createSessionHandlers,
   handleSessionCommand,
   type SessionHandlers,
 } from "../session/interactive.js";
-import { getStatusDisplay } from "../session/in-session-commands.js";
-import { watchLog, getLogPath, type AgentEvent } from "../session/agent-log.js";
+import { getStatusDisplay, getHelpDisplay } from "../session/in-session-commands.js";
+import { watchLog, getLogPath, isLogActive, type AgentEvent } from "../session/agent-log.js";
 import { AgentPanel } from "../ui/agent-panel.js";
+import { friendlyError } from "../orchestrator/error-handling.js";
 
 // ── Active session state ────────────────────────────────────────────
 
@@ -34,6 +35,7 @@ const COMMANDS = [
   "/init",
   "/help",
   "/exit",
+  "/quit",
 ] as const;
 
 const SESSION_ID_COMMANDS = new Set(["/enter", "/show", "/stop", "/delete"]);
@@ -47,21 +49,7 @@ const HELP_TEXT_ROOT = `Commands:
   /delete <session_id>    Delete a session
   /init                   Auto-discover CLIs and generate config
   /help                   Show this help
-  /exit                   Quit`;
-
-const HELP_TEXT_SESSION = `Session commands (@ prefix):
-  @build      — Finalize plan and start autonomous build
-  @status     — Show current task progress
-  @plan       — Re-display the current plan
-  @feedback   — Give feedback on completed work
-  @diff       — Show cumulative diff
-  @pr         — Show PR link
-  @tasks      — List all tasks and statuses
-  @stop       — Stop this session and go back
-  @help       — Show session commands
-
-Any other text is sent directly to the planner.
-Use /help for global commands.`;
+  /exit, /quit            Quit sweteam`;
 
 export function parseReplInput(input: string): {
   command: string;
@@ -142,16 +130,19 @@ export function getCompletions(line: string): string[] {
 
 /**
  * Attach to a running build's agent log and display output via AgentPanel.
- * Blocks until the build completes or the user presses Enter/Ctrl-C.
+ * Blocks until the build completes, the log goes stale, or the user presses
+ * Enter/Ctrl-C/Escape.
  */
 function watchBuildLive(sessionId: string): Promise<void> {
   return new Promise<void>((resolve) => {
     const panel = new AgentPanel();
     let resolved = false;
+    let lastEventTime = Date.now();
 
-    function finish() {
+    function finish(reason?: string) {
       if (resolved) return;
       resolved = true;
+      if (staleTimer) clearInterval(staleTimer);
       watcher.stop();
       panel.destroy();
       process.stdin.removeListener("data", onKey);
@@ -159,10 +150,12 @@ function watchBuildLive(sessionId: string): Promise<void> {
         process.stdin.setRawMode!(false);
       }
       process.stdin.pause();
+      if (reason) console.log(reason);
       resolve();
     }
 
     const watcher = watchLog(sessionId, (event: AgentEvent) => {
+      lastEventTime = Date.now();
       switch (event.type) {
         case "agent-start":
           panel.addAgent(event.id, event.role!, event.taskId!, event.title!);
@@ -179,12 +172,18 @@ function watchBuildLive(sessionId: string): Promise<void> {
       }
     });
 
-    // Let user press Enter or Ctrl-C to detach
+    // Auto-detach if no new events arrive for 30 seconds (build is dead)
+    const staleTimer = setInterval(() => {
+      if (Date.now() - lastEventTime > 30_000) {
+        finish("\nNo build activity for 30s. Build may still be running — type @status to check.\n");
+      }
+    }, 1000);
+
+    // Let user press Enter, Ctrl-C, or Escape to detach
     function onKey(data: Buffer) {
       const key = data.toString();
-      if (key === "\r" || key === "\n" || key === "\x03") {
-        console.log("\nDetached from build output.\n");
-        finish();
+      if (key === "\r" || key === "\n" || key === "\x03" || key === "\x1b") {
+        finish("\nDetached from build output.\n");
       }
     }
 
@@ -254,10 +253,9 @@ async function dispatch(command: string, args: string[]): Promise<void> {
 
       // Status-aware guidance on re-entry
       if (session.status === "building" || session.status === "iterating") {
-        // Check if there's a live log file with agent output
-        const logPath = getLogPath(session.id);
-        if (existsSync(logPath)) {
-          console.log("Attaching to live build output... (press Enter to detach)\n");
+        // Check if a build is actually running (log has recent writes)
+        if (isLogActive(session.id)) {
+          console.log("Attaching to live build output... (press Enter or Escape to detach)\n");
           await watchBuildLive(session.id);
           // Re-check status after watching — build may have completed
           const updated = getSession(session.id);
@@ -273,7 +271,15 @@ async function dispatch(command: string, args: string[]): Promise<void> {
         }
       } else if (session.status === "awaiting_feedback") {
         console.log(getStatusDisplay(session.id));
-        console.log("Send feedback or @feedback <text>.\n");
+        // Check if build actually completed or was interrupted (all tasks still queued)
+        const { getTasksForSession: getTasks } = await import("../orchestrator/orchestrator.js");
+        const sessionTasks = getTasks(session.id);
+        const allQueued = sessionTasks.length > 0 && sessionTasks.every((t) => t.status === "queued");
+        if (allQueued) {
+          console.log("Build was interrupted before any tasks ran. Type @build to retry.\n");
+        } else {
+          console.log("Send feedback or @feedback <text>.\n");
+        }
       } else if (session.status === "planning" && session.planJson) {
         console.log("A plan exists. Type @build or continue chatting.\n");
       } else if (session.status === "planning") {
@@ -305,12 +311,13 @@ async function dispatch(command: string, args: string[]): Promise<void> {
     }
     case "/delete": {
       if (args.length < 1) {
-        console.log("Usage: /delete <session_id>");
+        console.log("Usage: /delete <session_id>  or  /delete --all");
         break;
       }
       const { handleDelete } = await import("../commands/delete.js");
       await handleDelete(args[0]);
-      if (activeSession && activeSession.id === args[0]) {
+      // Clear active session if it was deleted
+      if (activeSession && (args[0] === "--all" || activeSession.id === args[0])) {
         activeSession = null;
       }
       break;
@@ -323,7 +330,7 @@ async function dispatch(command: string, args: string[]): Promise<void> {
     }
     case "/help": {
       if (activeSession) {
-        console.log(HELP_TEXT_SESSION);
+        console.log(getHelpDisplay(activeSession.id));
         console.log();
       }
       console.log(HELP_TEXT_ROOT);
@@ -339,11 +346,29 @@ async function dispatch(command: string, args: string[]): Promise<void> {
 
 // ── Prompt string ───────────────────────────────────────────────────
 
+const PROMPT_STATE_LABELS: Record<string, string> = {
+  planning: "planning",
+  building: "building",
+  awaiting_feedback: "feedback",
+  iterating: "iterating",
+  stopped: "stopped",
+};
+
 function getPrompt(): string {
   if (activeSession) {
     const short =
       activeSession.repo.split("/").pop() || activeSession.id;
-    return `${short}> `;
+    let stateTag = "";
+    try {
+      const session = getSession(activeSession.id);
+      if (session?.status) {
+        const label = PROMPT_STATE_LABELS[session.status] ?? session.status;
+        stateTag = ` (${label})`;
+      }
+    } catch {
+      // DB may be unavailable
+    }
+    return `${short}${stateTag}> `;
   }
   return "sweteam> ";
 }
@@ -392,17 +417,27 @@ export async function runRepl(opts?: ReplOptions): Promise<void> {
       getCompletions,
     });
 
+    // ── Escape: leave session, go back to sweteam> ──
+    if (line === ESCAPE_SIGNAL) {
+      if (activeSession) {
+        const short = activeSession.repo.split("/").pop() || activeSession.id;
+        console.log(`Left session ${activeSession.id} (${short})`);
+        activeSession = null;
+      }
+      continue;
+    }
+
     const trimmed = line.trim();
     if (!trimmed) continue;
 
     // ── / commands always work ──
     if (trimmed.startsWith("/")) {
       const { command, args } = parseReplInput(trimmed);
-      if (command === "/exit") break;
+      if (command === "/exit" || command === "/quit") break;
       try {
         await dispatch(command, args);
       } catch (err) {
-        console.error(err instanceof Error ? err.message : String(err));
+        console.error(friendlyError(err instanceof Error ? err.message : String(err)));
       }
       continue;
     }
@@ -421,8 +456,24 @@ export async function runRepl(opts?: ReplOptions): Promise<void> {
         if (stopped) {
           activeSession = null;
         }
+        // After @build, auto-attach to the live build output
+        if (trimmed === "@build" && activeSession) {
+          if (isLogActive(activeSession.id)) {
+            console.log("Watching build output... (press Enter or Escape to detach)\n");
+            await watchBuildLive(activeSession.id);
+            // Re-check session status after watching
+            const { getSession: gs } = await import("../session/manager.js");
+            const updated = gs(activeSession.id);
+            if (updated?.status === "awaiting_feedback") {
+              console.log("Build complete. Send feedback or @feedback <text>.\n");
+            } else if (updated?.status === "building") {
+              console.log(getStatusDisplay(activeSession.id));
+              console.log("\nBuild running in background. Type @status to check progress.\n");
+            }
+          }
+        }
       } catch (err) {
-        console.error(err instanceof Error ? err.message : String(err));
+        console.error(friendlyError(err instanceof Error ? err.message : String(err)));
       }
       continue;
     }
@@ -432,7 +483,7 @@ export async function runRepl(opts?: ReplOptions): Promise<void> {
       try {
         await activeSession.handlers.onMessage(trimmed);
       } catch (err) {
-        console.error(err instanceof Error ? err.message : String(err));
+        console.error(friendlyError(err instanceof Error ? err.message : String(err)));
       }
     } else {
       console.log(
