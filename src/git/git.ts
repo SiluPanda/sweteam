@@ -1,18 +1,25 @@
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 
-export function git(args: string, cwd: string): string {
-  return execSync(`git ${args}`, {
+/**
+ * Run a git command with array-based arguments (no shell interpolation).
+ * This prevents command injection via commit messages, branch names, etc.
+ */
+export function git(args: string[], cwd: string): string {
+  return execFileSync("git", args, {
     cwd,
     encoding: "utf-8",
     timeout: 30000,
   }).trim();
 }
 
-export function gh(args: string, cwd: string): string {
-  return execSync(`gh ${args}`, {
+/**
+ * Run a gh CLI command with array-based arguments (no shell interpolation).
+ */
+export function gh(args: string[], cwd: string): string {
+  return execFileSync("gh", args, {
     cwd,
     encoding: "utf-8",
     timeout: 30000,
@@ -35,8 +42,31 @@ export function resolveRepo(input: string): string {
   }
 
   // Short name: just repo name — resolve via gh api
-  const user = gh("api user -q .login", ".");
+  const user = gh(["api", "user", "-q", ".login"], ".");
   return `${user}/${input}`;
+}
+
+/** Detect the default branch name for the repo (main, master, etc.). */
+export function getDefaultBranch(cwd: string): string {
+  try {
+    // Try to get the default branch from the remote HEAD
+    const ref = git(["symbolic-ref", "refs/remotes/origin/HEAD", "--short"], cwd);
+    // Returns e.g. "origin/main" — strip the "origin/" prefix
+    return ref.replace(/^origin\//, "");
+  } catch {
+    // Fallback: check if "main" exists, otherwise try "master"
+    try {
+      git(["rev-parse", "--verify", "main"], cwd);
+      return "main";
+    } catch {
+      try {
+        git(["rev-parse", "--verify", "master"], cwd);
+        return "master";
+      } catch {
+        return "main";
+      }
+    }
+  }
 }
 
 export function createBranch(
@@ -45,11 +75,23 @@ export function createBranch(
   cwd: string,
 ): void {
   try {
-    git(`checkout -b ${name} ${base}`, cwd);
-  } catch {
-    // Branch already exists (e.g. retry after a failed build) — reset it to base
-    git(`checkout ${name}`, cwd);
-    git(`reset --hard ${base}`, cwd);
+    git(["checkout", "-b", name, base], cwd);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+
+    if (msg.includes("cannot lock ref") || msg.includes("exists; cannot create")) {
+      // Git ref conflict — e.g. branch "sw/X" blocks "sw/X/Y" or vice versa.
+      // Delete the conflicting ref and retry.
+      const match = msg.match(/'refs\/heads\/([^']+)' exists/);
+      if (match) {
+        try { git(["branch", "-D", match[1]], cwd); } catch { /* ignore */ }
+      }
+      git(["checkout", "-b", name, base], cwd);
+    } else {
+      // Branch already exists — check it out and update it
+      git(["checkout", name], cwd);
+      git(["reset", "--hard", base], cwd);
+    }
   }
 }
 
@@ -59,27 +101,27 @@ export function squashMerge(
   message: string,
   cwd: string,
 ): void {
-  git(`checkout ${target}`, cwd);
-  git(`merge --squash ${source}`, cwd);
-  git(`commit -m "${message.replace(/"/g, '\\"')}"`, cwd);
-  git(`branch -D ${source}`, cwd);
+  git(["checkout", target], cwd);
+  git(["merge", "--squash", source], cwd);
+  git(["commit", "-m", message], cwd);
+  git(["branch", "-D", source], cwd);
 }
 
 export function getDiff(cwd: string): string {
-  return git("diff", cwd);
+  return git(["diff"], cwd);
 }
 
 export function getStagedDiff(cwd: string): string {
-  return git("diff --cached", cwd);
+  return git(["diff", "--cached"], cwd);
 }
 
 export function commitAll(message: string, cwd: string): void {
-  git("add -A", cwd);
-  git(`commit -m "${message.replace(/"/g, '\\"')}"`, cwd);
+  git(["add", "-A"], cwd);
+  git(["commit", "-m", message], cwd);
 }
 
 export function pushBranch(branch: string, cwd: string): void {
-  git(`push origin ${branch}`, cwd);
+  git(["push", "origin", branch], cwd);
 }
 
 export function createPR(
@@ -90,7 +132,7 @@ export function createPR(
   cwd: string,
 ): string {
   return gh(
-    `pr create --title "${title.replace(/"/g, '\\"')}" --body "${body.replace(/"/g, '\\"')}" --base ${base} --head ${head}`,
+    ["pr", "create", "--title", title, "--body", body, "--base", base, "--head", head],
     cwd,
   );
 }
@@ -98,7 +140,7 @@ export function createPR(
 /** Check whether `dir` is inside a git working tree. */
 export function isGitRepo(dir: string): boolean {
   try {
-    git("rev-parse --is-inside-work-tree", dir);
+    git(["rev-parse", "--is-inside-work-tree"], dir);
     return true;
   } catch {
     return false;
@@ -107,13 +149,13 @@ export function isGitRepo(dir: string): boolean {
 
 /** Return the git working-tree root for `dir`. */
 export function getRepoRoot(dir: string): string {
-  return git("rev-parse --show-toplevel", dir);
+  return git(["rev-parse", "--show-toplevel"], dir);
 }
 
 /** Derive an owner/repo slug from the origin remote URL. */
 export function repoFromRemote(dir: string): string | null {
   try {
-    const url = git("remote get-url origin", dir);
+    const url = git(["remote", "get-url", "origin"], dir);
     // SSH:  git@github.com:owner/repo.git
     const ssh = url.match(/github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?$/);
     if (ssh) return ssh[1];
@@ -126,19 +168,39 @@ export function repoFromRemote(dir: string): string | null {
   }
 }
 
-export function cloneOrLocateRepo(repo: string): string {
+/** Delete branches matching a pattern (for cleanup). */
+export function deleteBranches(pattern: string, cwd: string): void {
+  try {
+    const branches = git(["branch", "--list", pattern], cwd)
+      .split("\n")
+      .map(b => b.trim().replace(/^\* /, ""))
+      .filter(Boolean);
+    for (const branch of branches) {
+      try {
+        git(["branch", "-D", branch], cwd);
+      } catch {
+        // Ignore errors deleting individual branches
+      }
+    }
+  } catch {
+    // No branches to delete
+  }
+}
+
+export function cloneOrLocateRepo(repo: string, defaultBranch?: string): string {
   const reposDir = join(homedir(), ".sweteam", "repos");
   const repoDirName = repo.replace("/", "--");
   const repoPath = join(reposDir, repoDirName);
 
   if (existsSync(repoPath)) {
-    git("fetch origin", repoPath);
-    git("checkout main", repoPath);
-    git("pull", repoPath);
+    git(["fetch", "origin"], repoPath);
+    const branch = defaultBranch ?? getDefaultBranch(repoPath);
+    git(["checkout", branch], repoPath);
+    git(["pull"], repoPath);
     return repoPath;
   }
 
   mkdirSync(reposDir, { recursive: true });
-  gh(`repo clone ${repo} ${repoPath}`, ".");
+  gh(["repo", "clone", repo, repoPath], ".");
   return repoPath;
 }

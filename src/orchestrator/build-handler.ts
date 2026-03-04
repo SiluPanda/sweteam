@@ -11,7 +11,7 @@ import {
   displayTaskId,
   type OrchestratorCallbacks,
 } from "./orchestrator.js";
-import { pushBranch, createPR } from "../git/git.js";
+import { git, pushBranch, createPR, getDefaultBranch, deleteBranches } from "../git/git.js";
 import { AgentPanel } from "../ui/agent-panel.js";
 import { clearLog, writeEvent } from "../session/agent-log.js";
 
@@ -135,7 +135,7 @@ export async function handleBuild(
   // Transition to building
   transition(sessionId, "building");
 
-  // Clean up any leftover tasks from a previous failed build
+  // Clean up all tasks from previous builds — the entire plan is re-inserted
   db.delete(tasksTable)
     .where(eq(tasksTable.sessionId, sessionId))
     .run();
@@ -162,6 +162,24 @@ export async function handleBuild(
   const repoPath = session.repoLocalPath!;
   const sessionBranch = session.workingBranch!;
 
+  // Ensure we're on the session branch before cleanup (prevents it from being deleted)
+  try {
+    git(["checkout", sessionBranch], repoPath);
+  } catch {
+    // May already be on it
+  }
+
+  // Clean up stale task branches from previous build attempts.
+  // Old naming used "/" (sw/s_ID/taskN-...) which conflicts with session branch sw/s_ID.
+  // New naming uses "-" (sw/s_ID-taskN-...) but leftovers from either scheme must go.
+  // The session branch itself is safe because it's currently checked out.
+  try {
+    deleteBranches(`sw/${sessionId}-*`, repoPath);  // new-style task branches
+    deleteBranches(`sw/${sessionId}/*`, repoPath);  // old-style task branches (ref conflict)
+  } catch {
+    // Best-effort cleanup
+  }
+
   // Clear log file so watchers from other processes start fresh
   clearLog(sessionId);
 
@@ -185,7 +203,16 @@ export async function handleBuild(
     },
   };
 
-  const result = await runOrchestrator(sessionId, repoPath, sessionBranch, callbacks);
+  let result: Awaited<ReturnType<typeof runOrchestrator>>;
+  try {
+    result = await runOrchestrator(sessionId, repoPath, sessionBranch, callbacks);
+  } catch (err) {
+    panel.destroy();
+    writeEvent(sessionId, { type: "build-complete", id: "build" });
+    // Build failed before completing — go back to planning so user can @build to retry
+    try { transition(sessionId, "planning"); } catch { /* already transitioned */ }
+    throw err;
+  }
   panel.destroy();
   writeEvent(sessionId, { type: "build-complete", id: "build" });
 
@@ -203,7 +230,8 @@ export async function handleBuild(
       pushBranch(sessionBranch, repoPath);
 
       const prBody = generatePrBody(session.goal, result, allTasks);
-      prUrl = createPR(session.goal, prBody, "main", sessionBranch, repoPath);
+      const baseBranch = getDefaultBranch(repoPath);
+      prUrl = createPR(session.goal, prBody, baseBranch, sessionBranch, repoPath);
 
       // Parse PR URL for number
       const prMatch = prUrl.match(/\/pull\/(\d+)/);

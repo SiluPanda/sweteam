@@ -4,6 +4,7 @@ import { tasks } from "../db/schema.js";
 import { git, createBranch, getDiff, commitAll } from "../git/git.js";
 import { resolveAdapter } from "../adapters/adapter.js";
 import { loadConfig } from "../config/loader.js";
+import { displayTaskId } from "./orchestrator.js";
 
 export interface TaskRecord {
   id: string;
@@ -89,8 +90,12 @@ export async function runTask(
   const config = loadConfig();
   const db = getDb();
 
-  // Create task branch
-  const branchName = `sw/${task.id}-${task.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30)}`;
+  // Create task branch — use dash separator to avoid git ref conflicts.
+  // Session branch is "sw/s_ID" so task branch must NOT nest under it
+  // (git forbids both refs/heads/sw/X and refs/heads/sw/X/Y).
+  // e.g. "s_UclHjgC1:1" → "sw/s_UclHjgC1-1-add-cachetools-dependency"
+  const safeBranchId = task.id.replace(/:/g, "-").replace(/[^a-zA-Z0-9/_-]/g, "");
+  const branchName = `sw/${safeBranchId}-${task.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30)}`;
 
   createBranch(branchName, sessionBranch, repoPath);
 
@@ -122,11 +127,11 @@ export async function runTask(
     // Commit any uncommitted changes the coder left behind
     const uncommitted = getDiff(repoPath);
     if (uncommitted.length > 0) {
-      commitAll(`feat(${task.id}): ${task.title}`, repoPath);
+      commitAll(`feat(${displayTaskId(task.id)}): ${task.title}`, repoPath);
     }
 
     // Capture the full diff of this task branch vs the session branch
-    const diff = git(`diff ${sessionBranch}...HEAD`, repoPath);
+    const diff = git(["diff", `${sessionBranch}...HEAD`], repoPath);
 
     // Update DB with results
     db.update(tasks)
