@@ -1,8 +1,8 @@
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 
 export function validateGhAuth(): { authenticated: boolean; message: string } {
   try {
-    const output = execSync("gh auth status", {
+    const output = execFileSync("gh", ["auth", "status"], {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 10000,

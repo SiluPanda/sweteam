@@ -26,31 +26,31 @@ describe("git/git — core wrappers", () => {
 
   it("should execute git commands and return output", () => {
     const dir = createTempGitRepo();
-    const status = git("status", dir);
+    const status = git(["status"], dir);
     expect(status).toContain("On branch");
   });
 
   it("should return trimmed output", () => {
     const dir = createTempGitRepo();
-    const result = git("rev-parse --is-inside-work-tree", dir);
+    const result = git(["rev-parse", "--is-inside-work-tree"], dir);
     expect(result).toBe("true");
   });
 
   it("should throw on invalid git command", () => {
     const dir = createTempGitRepo();
-    expect(() => git("nonexistent-command", dir)).toThrow();
+    expect(() => git(["nonexistent-command"], dir)).toThrow();
   });
 
   it("should work with the specified cwd", () => {
     const dir = createTempGitRepo();
-    const topLevel = git("rev-parse --show-toplevel", dir);
+    const topLevel = git(["rev-parse", "--show-toplevel"], dir);
     // Should be the temp dir (possibly with resolved symlinks)
     expect(topLevel).toBeTruthy();
   });
 
   it("gh() should execute gh commands", () => {
     // Just verify gh is callable — don't test auth-dependent commands
-    const result = gh("--version", ".");
+    const result = gh(["--version"], ".");
     expect(result).toContain("gh version");
   });
 });

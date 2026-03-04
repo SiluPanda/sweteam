@@ -11,6 +11,7 @@ export interface OrchestratorCallbacks {
   onAgentStart?: (taskId: string, taskTitle: string, role: string) => void;
   onAgentOutput?: (taskId: string, role: string, chunk: string) => void;
   onAgentEnd?: (taskId: string, role: string, success: boolean) => void;
+  onInputNeeded?: (taskId: string, role: string, promptText: string) => Promise<string | null>;
 }
 
 export interface OrchestratorResult {
@@ -195,8 +196,11 @@ export async function runOrchestrator(
     const coderOutput = cb.onAgentOutput
       ? (chunk: string) => cb.onAgentOutput!(task.id, "Coder", chunk)
       : undefined;
+    const coderInputNeeded = cb.onInputNeeded
+      ? (promptText: string) => cb.onInputNeeded!(task.id, "Coder", promptText)
+      : undefined;
 
-    const result = await runTask(task, sessionBranch, repoPath, coderOutput);
+    const result = await runTask(task, sessionBranch, repoPath, coderOutput, coderInputNeeded);
     cb.onAgentEnd?.(task.id, "Coder", result.success);
 
     if (!result.success) {
@@ -220,6 +224,9 @@ export async function runOrchestrator(
     const reviewerOutput = cb.onAgentOutput
       ? (chunk: string) => cb.onAgentOutput!(task.id, "Reviewer", chunk)
       : undefined;
+    const reviewerInputNeeded = cb.onInputNeeded
+      ? (promptText: string) => cb.onInputNeeded!(task.id, "Reviewer", promptText)
+      : undefined;
 
     const reviewResult = await reviewAndMerge(
       updatedTask,
@@ -227,6 +234,7 @@ export async function runOrchestrator(
       repoPath,
       config.execution.max_review_cycles,
       reviewerOutput,
+      reviewerInputNeeded,
     );
     cb.onAgentEnd?.(task.id, "Reviewer", reviewResult.merged);
 

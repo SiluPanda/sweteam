@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import { createInterface } from "readline";
 
 /**
  * Interactive prompt with dropdown autocomplete and ghost-text.
@@ -15,6 +16,9 @@ import chalk from "chalk";
  * - Escape     Dismiss the dropdown
  * - Ctrl-C     Exit
  */
+
+/** Sentinel value returned by promptLine when the user presses Escape to back out. */
+export const ESCAPE_SIGNAL = "\x1b__ESCAPE__";
 
 export interface PromptOptions {
   prompt: string;
@@ -98,17 +102,15 @@ export function promptLine(opts: PromptOptions): Promise<string> {
 
     // ── lifecycle ───────────────────────────────────────────────
 
-    function teardown() {
-      clearDropdown();
-      process.stdin.setRawMode!(false);
-      process.stdin.pause();
-      process.stdin.removeListener("data", onData);
-    }
-
     function finish(value: string) {
       clearDropdown();
-      process.stdout.write(`\r\x1b[2K${prompt}${value}\n`);
-      process.stdin.setRawMode!(false);
+      if (value === ESCAPE_SIGNAL) {
+        // Escape — clear the prompt line cleanly, no echo
+        process.stdout.write(`\r\x1b[2K`);
+      } else {
+        process.stdout.write(`\r\x1b[2K${prompt}${value}\n`);
+      }
+      if (process.stdin.isTTY) process.stdin.setRawMode(false);
       process.stdin.pause();
       process.stdin.removeListener("data", onData);
       resolve(value);
@@ -137,7 +139,7 @@ export function promptLine(opts: PromptOptions): Promise<string> {
       // ── Ctrl-C / Ctrl-D ──
       if (seq === "\x03" || seq === "\x04") {
         finish("");
-        process.exit(0);
+        return;
       }
 
       // ── Tab: accept suggestion ──
@@ -192,11 +194,23 @@ export function promptLine(opts: PromptOptions): Promise<string> {
         return;
       }
 
-      // ── Escape: dismiss dropdown ──
+      // ── Escape: dismiss dropdown, or back out if nothing to dismiss ──
       if (seq === "\x1b") {
-        suggestions = [];
-        selectedIndex = 0;
-        render();
+        if (suggestions.length > 0) {
+          // Dropdown is open — just dismiss it
+          suggestions = [];
+          selectedIndex = 0;
+          render();
+        } else if (input === "") {
+          // Nothing typed, no dropdown — signal "back out"
+          finish(ESCAPE_SIGNAL);
+        } else {
+          // Has typed text — clear the input first
+          input = "";
+          cursor = 0;
+          refreshSuggestions();
+          render();
+        }
         return;
       }
 
@@ -227,7 +241,19 @@ export function promptLine(opts: PromptOptions): Promise<string> {
 
     // ── start ───────────────────────────────────────────────────
 
-    process.stdin.setRawMode!(true);
+    if (!process.stdin.isTTY) {
+      // Non-TTY mode (piped input): read line-by-line via readline
+      process.stdout.write(prompt);
+      const rl = createInterface({ input: process.stdin });
+      rl.once("line", (line) => {
+        rl.close();
+        resolve(line);
+      });
+      rl.once("close", () => resolve(""));
+      return;
+    }
+
+    process.stdin.setRawMode(true);
     process.stdin.resume();
     process.stdin.on("data", onData);
     render();

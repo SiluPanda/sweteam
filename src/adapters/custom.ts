@@ -1,9 +1,11 @@
-import { spawn, execSync } from "child_process";
+import { spawn, execFileSync } from "child_process";
 import { writeFileSync, readFileSync, unlinkSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import type { AgentAdapter, AgentResult } from "./adapter.js";
 import type { AgentConfig } from "../config/loader.js";
+import { trackProcess } from "../lifecycle.js";
+import { detectInputPrompt, extractPromptText } from "./prompt-detection.js";
 
 export class CustomAdapter implements AgentAdapter {
   name: string;
@@ -16,7 +18,7 @@ export class CustomAdapter implements AgentAdapter {
 
   async isAvailable(): Promise<boolean> {
     try {
-      execSync(`which ${this.config.command}`, {
+      execFileSync("which", [this.config.command], {
         encoding: "utf-8",
         stdio: "pipe",
       });
@@ -31,6 +33,7 @@ export class CustomAdapter implements AgentAdapter {
     cwd: string;
     timeout?: number;
     onOutput?: (chunk: string) => void;
+    onInputNeeded?: (promptText: string) => Promise<string | null>;
   }): Promise<AgentResult> {
     const timeout = opts.timeout ?? 0;
     const startTime = Date.now();
@@ -53,9 +56,13 @@ export class CustomAdapter implements AgentAdapter {
         cwd: opts.cwd,
         stdio: ["pipe", "pipe", "pipe"],
       });
+      trackProcess(proc);
 
       let stdout = "";
       let stderr = "";
+      let recentOutput = "";
+      let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+      let waitingForInput = false;
 
       proc.stdout.on("data", (chunk: Buffer) => {
         const text = chunk.toString();
@@ -63,6 +70,29 @@ export class CustomAdapter implements AgentAdapter {
         if (opts.onOutput) {
           opts.onOutput(text);
         }
+
+        if (!opts.onInputNeeded) return;
+
+        recentOutput += text;
+        if (recentOutput.length > 500) {
+          recentOutput = recentOutput.slice(-500);
+        }
+
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          if (waitingForInput) return;
+          if (detectInputPrompt(recentOutput)) {
+            waitingForInput = true;
+            const promptText = extractPromptText(recentOutput);
+            opts.onInputNeeded!(promptText).then((response) => {
+              waitingForInput = false;
+              if (response !== null && !proc.killed) {
+                proc.stdin.write(response + "\n");
+              }
+              recentOutput = "";
+            });
+          }
+        }, 2000);
       });
 
       proc.stderr.on("data", (chunk: Buffer) => {
@@ -85,6 +115,7 @@ export class CustomAdapter implements AgentAdapter {
 
       proc.on("close", (code) => {
         if (timer) clearTimeout(timer);
+        if (debounceTimer) clearTimeout(debounceTimer);
         let output = stdout || stderr;
 
         if (outputFrom === "file") {
@@ -105,13 +136,23 @@ export class CustomAdapter implements AgentAdapter {
 
       proc.on("error", (err) => {
         if (timer) clearTimeout(timer);
+        if (debounceTimer) clearTimeout(debounceTimer);
         cleanup();
         reject(err);
       });
 
       if (promptVia === "stdin") {
         proc.stdin.write(opts.prompt);
-        proc.stdin.end();
+        // If onInputNeeded is provided, keep stdin open for interactive responses
+        if (!opts.onInputNeeded) {
+          proc.stdin.end();
+        } else {
+          proc.on("close", () => {
+            if (!proc.stdin.destroyed) {
+              proc.stdin.end();
+            }
+          });
+        }
       }
     });
   }

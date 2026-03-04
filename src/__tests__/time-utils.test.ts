@@ -33,10 +33,10 @@ describe("utils/time — relativeTime", () => {
 });
 
 describe("utils/time — formatDuration", () => {
-  it("should format minutes only", () => {
+  it("should format minutes and seconds", () => {
     const start = new Date("2026-01-01T10:00:00Z");
     const end = new Date("2026-01-01T10:45:00Z");
-    expect(formatDuration(start, end)).toBe("45m");
+    expect(formatDuration(start, end)).toBe("45m 0s");
   });
 
   it("should format hours and minutes", () => {
@@ -47,12 +47,18 @@ describe("utils/time — formatDuration", () => {
 
   it("should format zero duration", () => {
     const date = new Date("2026-01-01T10:00:00Z");
-    expect(formatDuration(date, date)).toBe("0m");
+    expect(formatDuration(date, date)).toBe("0s");
   });
 
   it("should format exact hours", () => {
     const start = new Date("2026-01-01T10:00:00Z");
     const end = new Date("2026-01-01T13:00:00Z");
     expect(formatDuration(start, end)).toBe("3h 0m");
+  });
+
+  it("should format seconds only for sub-minute durations", () => {
+    const start = new Date("2026-01-01T10:00:00Z");
+    const end = new Date("2026-01-01T10:00:30Z");
+    expect(formatDuration(start, end)).toBe("30s");
   });
 });

@@ -25,9 +25,9 @@ vi.mock("child_process", () => {
   }
 
   return {
-    execSync: vi.fn((cmd: string) => {
-      if (cmd.startsWith("which ")) {
-        const binary = cmd.slice(6);
+    execFileSync: vi.fn((command: string, args: string[]) => {
+      if (command === "which" && args.length > 0) {
+        const binary = args[0];
         if (["codex", "opencode", "my-tool"].includes(binary)) {
           return `/usr/bin/${binary}\n`;
         }

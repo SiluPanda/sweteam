@@ -1,4 +1,4 @@
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { addMessage } from "../session/manager.js";
@@ -61,7 +61,8 @@ export function runTests(
   addMessage(sessionId, "system", `Running tests: ${command}`);
 
   try {
-    const output = execSync(command, {
+    const [cmd, ...args] = command.split(" ");
+    const output = execFileSync(cmd, args, {
       cwd: repoPath,
       encoding: "utf-8",
       timeout: 120000,

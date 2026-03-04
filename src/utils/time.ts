@@ -15,8 +15,10 @@ export function relativeTime(date: Date): string {
 
 export function formatDuration(start: Date, end: Date): string {
   const diffMs = end.getTime() - start.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
   const diffHr = Math.floor(diffMin / 60);
   if (diffHr > 0) return `${diffHr}h ${diffMin % 60}m`;
-  return `${diffMin}m`;
+  if (diffMin > 0) return `${diffMin}m ${diffSec % 60}s`;
+  return `${diffSec}s`;
 }

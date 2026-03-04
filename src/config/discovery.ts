@@ -1,4 +1,4 @@
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 
 export interface CliInfo {
   name: string;
@@ -15,9 +15,9 @@ const CLI_TOOLS = [
   { name: "git", versionFlag: "--version" },
 ] as const;
 
-function tryExec(command: string): string | null {
+function tryExecFile(command: string, args: string[]): string | null {
   try {
-    return execSync(command, {
+    return execFileSync(command, args, {
       encoding: "utf-8",
       timeout: 5000,
       stdio: ["pipe", "pipe", "pipe"],
@@ -28,12 +28,12 @@ function tryExec(command: string): string | null {
 }
 
 function detectCli(name: string, versionFlag: string): CliInfo {
-  const whichResult = tryExec(`which ${name}`);
+  const whichResult = tryExecFile("which", [name]);
   if (!whichResult) {
     return { name, available: false };
   }
 
-  const versionResult = tryExec(`${name} ${versionFlag}`);
+  const versionResult = tryExecFile(name, [versionFlag]);
   const version = versionResult
     ? versionResult.split("\n")[0].trim()
     : undefined;

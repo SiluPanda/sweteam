@@ -78,9 +78,10 @@ describe("orchestrator/reviewer — parseReviewResponse", () => {
     expect(result.verdict).toBe("approve");
   });
 
-  it("should auto-approve on unparseable response", () => {
+  it("should request changes on unparseable response", () => {
     const result = parseReviewResponse("This is not JSON at all");
-    expect(result.verdict).toBe("approve");
-    expect(result.summary).toContain("auto-approving");
+    expect(result.verdict).toBe("request_changes");
+    expect(result.summary).toContain("could not be parsed");
+    expect(result.issues.length).toBeGreaterThan(0);
   });
 });

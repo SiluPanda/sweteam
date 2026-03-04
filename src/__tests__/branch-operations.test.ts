@@ -29,17 +29,17 @@ describe("git/git — branch operations", () => {
 
   it("should create a new branch from a base", () => {
     const dir = createTempGitRepo();
-    const baseBranch = git("branch --show-current", dir);
+    const baseBranch = git(["branch", "--show-current"], dir);
 
     createBranch("feature-branch", baseBranch, dir);
 
-    const currentBranch = git("branch --show-current", dir);
+    const currentBranch = git(["branch", "--show-current"], dir);
     expect(currentBranch).toBe("feature-branch");
   });
 
   it("should squash merge a branch into target", () => {
     const dir = createTempGitRepo();
-    const baseBranch = git("branch --show-current", dir);
+    const baseBranch = git(["branch", "--show-current"], dir);
 
     // Create feature branch and add a commit
     createBranch("feature-branch", baseBranch, dir);
@@ -54,21 +54,21 @@ describe("git/git — branch operations", () => {
     squashMerge("feature-branch", baseBranch, "feat: merged feature", dir);
 
     // Should be on base branch
-    const currentBranch = git("branch --show-current", dir);
+    const currentBranch = git(["branch", "--show-current"], dir);
     expect(currentBranch).toBe(baseBranch);
 
     // Feature branch should be deleted
-    const branches = git("branch", dir);
+    const branches = git(["branch"], dir);
     expect(branches).not.toContain("feature-branch");
 
     // The squash merge should be a single commit
-    const log = git("log --oneline", dir);
+    const log = git(["log", "--oneline"], dir);
     expect(log).toContain("feat: merged feature");
   });
 
   it("should handle commit messages with special characters", () => {
     const dir = createTempGitRepo();
-    const baseBranch = git("branch --show-current", dir);
+    const baseBranch = git(["branch", "--show-current"], dir);
 
     createBranch("test-branch", baseBranch, dir);
     writeFileSync(join(dir, "test.ts"), "const t = 1;\n");
@@ -81,7 +81,7 @@ describe("git/git — branch operations", () => {
       dir,
     );
 
-    const log = git("log --oneline -1", dir);
+    const log = git(["log", "--oneline", "-1"], dir);
     expect(log).toContain("feat(task-001): add feature");
   });
 });

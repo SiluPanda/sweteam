@@ -8,7 +8,7 @@ import {
   type SessionHandlers,
 } from "../session/interactive.js";
 import { getStatusDisplay, getHelpDisplay } from "../session/in-session-commands.js";
-import { watchLog, getLogPath, isLogActive, type AgentEvent } from "../session/agent-log.js";
+import { watchLog, getLogPath, isLogActive, writeEvent, type AgentEvent } from "../session/agent-log.js";
 import { AgentPanel } from "../ui/agent-panel.js";
 import { friendlyError } from "../orchestrator/error-handling.js";
 
@@ -139,9 +139,17 @@ function watchBuildLive(sessionId: string): Promise<void> {
     let resolved = false;
     let lastEventTime = Date.now();
 
+    // Input mode state
+    let inputMode = false;
+    let inputBuffer = "";
+    let pendingRequestId: string | null = null;
+
     function finish(reason?: string) {
       if (resolved) return;
       resolved = true;
+      if (inputMode) {
+        exitInputMode();
+      }
       if (staleTimer) clearInterval(staleTimer);
       watcher.stop();
       panel.destroy();
@@ -152,6 +160,33 @@ function watchBuildLive(sessionId: string): Promise<void> {
       process.stdin.pause();
       if (reason) console.log(reason);
       resolve();
+    }
+
+    function enterInputMode(promptText: string, requestId: string) {
+      inputMode = true;
+      inputBuffer = "";
+      pendingRequestId = requestId;
+      panel.destroy(); // Temporarily clear panel so prompt is visible
+      process.stdout.write(`\nInput needed: ${promptText}\n> `);
+    }
+
+    function exitInputMode() {
+      inputMode = false;
+      inputBuffer = "";
+      pendingRequestId = null;
+    }
+
+    function submitInput() {
+      if (!pendingRequestId) return;
+      const response = inputBuffer.trim();
+      writeEvent(sessionId, {
+        type: "input-response",
+        id: pendingRequestId,
+        requestId: pendingRequestId,
+        response,
+      });
+      process.stdout.write("\n");
+      exitInputMode();
     }
 
     const watcher = watchLog(sessionId, (event: AgentEvent) => {
@@ -169,6 +204,10 @@ function watchBuildLive(sessionId: string): Promise<void> {
         case "build-complete":
           finish();
           break;
+        case "input-needed":
+          enterInputMode(event.promptText ?? "(input needed)", event.requestId!);
+          break;
+        // input-response is handled by the build process, not the REPL watcher
       }
     });
 
@@ -179,9 +218,39 @@ function watchBuildLive(sessionId: string): Promise<void> {
       }
     }, 1000);
 
-    // Let user press Enter, Ctrl-C, or Escape to detach
     function onKey(data: Buffer) {
       const key = data.toString();
+
+      if (inputMode) {
+        // In input mode: collect typed text
+        if (key === "\x1b") {
+          // Escape: cancel input and detach
+          process.stdout.write("\n(input cancelled)\n");
+          exitInputMode();
+          finish("\nDetached from build output.\n");
+        } else if (key === "\r" || key === "\n") {
+          // Enter: submit the response
+          submitInput();
+        } else if (key === "\x7f" || key === "\b") {
+          // Backspace
+          if (inputBuffer.length > 0) {
+            inputBuffer = inputBuffer.slice(0, -1);
+            process.stdout.write("\b \b");
+          }
+        } else if (key === "\x03") {
+          // Ctrl-C: cancel input and detach
+          process.stdout.write("\n(input cancelled)\n");
+          exitInputMode();
+          finish("\nDetached from build output.\n");
+        } else if (key.charCodeAt(0) >= 32) {
+          // Printable character
+          inputBuffer += key;
+          process.stdout.write(key);
+        }
+        return;
+      }
+
+      // Normal watch mode: Enter/Ctrl-C/Escape to detach
       if (key === "\r" || key === "\n" || key === "\x03" || key === "\x1b") {
         finish("\nDetached from build output.\n");
       }

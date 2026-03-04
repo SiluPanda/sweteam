@@ -6,7 +6,7 @@ import { addMessage } from "../session/manager.js";
 import { runTask, type TaskRecord } from "./task-runner.js";
 import { reviewAndMerge } from "./reviewer.js";
 import { buildDag, getReadyTasks } from "./dag.js";
-import { getTasksForSession, type OrchestratorResult } from "./orchestrator.js";
+import { getTasksForSession, displayTaskId, type OrchestratorResult } from "./orchestrator.js";
 
 // Mutex for serializing merge operations
 let merging = false;
@@ -33,7 +33,7 @@ async function runSingleTask(
   sessionId: string,
   maxReviewCycles: number,
 ): Promise<{ taskId: string; success: boolean }> {
-  addMessage(sessionId, "system", `Starting task ${task.id}: ${task.title}`);
+  addMessage(sessionId, "system", `Starting task ${displayTaskId(task.id)}: ${task.title}`);
 
   const result = await runTask(task, sessionBranch, repoPath);
 
@@ -56,7 +56,7 @@ async function runSingleTask(
   });
 
   if (reviewResult.merged) {
-    addMessage(sessionId, "system", `Task ${task.id} completed and merged`);
+    addMessage(sessionId, "system", `Task ${displayTaskId(task.id)} completed and merged`);
     return { taskId: task.id, success: true };
   }
 

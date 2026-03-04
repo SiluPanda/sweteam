@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { sessions, iterations, tasks as tasksTable } from "../db/schema.js";
@@ -248,15 +248,9 @@ export async function handleFeedback(
     .where(eq(tasksTable.sessionId, sessionId))
     .all();
 
-  const iterHistory = getIterationHistory(sessionId);
-
-  // Build feedback prompt and invoke planner
-  const prompt = buildFeedbackPrompt(
-    session.planJson ?? "{}",
-    allTasks,
-    feedbackText,
-    iterHistory,
-  );
+  // If all tasks are still queued (build never ran), skip the planner delta
+  // and just re-run the orchestrator directly
+  const allQueued = allTasks.length > 0 && allTasks.every((t) => t.status === "queued");
 
   // Clear log file so watchers from other processes start fresh
   clearLog(sessionId);
@@ -264,38 +258,53 @@ export async function handleFeedback(
   const panel = new AgentPanel();
   let agentCounter = 0;
 
-  // Planner phase
-  const plannerId = "planner-1";
-  panel.addAgent(plannerId, "Planner", sessionId, "Analyzing feedback");
-  writeEvent(sessionId, { type: "agent-start", id: plannerId, role: "Planner", taskId: sessionId, title: "Analyzing feedback" });
-  agentCounter++;
-  const adapter = resolveAdapter(config.roles.planner, config);
-  const result = await adapter.execute({
-    prompt,
-    cwd: session.repoLocalPath ?? ".",
-    timeout: 0,
-    onOutput: (chunk: string) => {
-      panel.appendOutput(plannerId, chunk);
-      writeEvent(sessionId, { type: "output", id: plannerId, chunk });
-    },
-  });
-  panel.completeAgent(plannerId, true);
-  writeEvent(sessionId, { type: "agent-end", id: plannerId, success: true });
+  if (!allQueued) {
+    const iterHistory = getIterationHistory(sessionId);
 
-  // Parse the plan delta
-  const delta = parsePlanDelta(result.output);
+    // Build feedback prompt and invoke planner
+    const prompt = buildFeedbackPrompt(
+      session.planJson ?? "{}",
+      allTasks,
+      feedbackText,
+      iterHistory,
+    );
 
-  // Track iteration
-  const iterNum = createIteration(sessionId, feedbackText, delta);
+    // Planner phase
+    const plannerId = "planner-1";
+    panel.addAgent(plannerId, "Planner", sessionId, "Analyzing feedback");
+    writeEvent(sessionId, { type: "agent-start", id: plannerId, role: "Planner", taskId: sessionId, title: "Analyzing feedback" });
+    agentCounter++;
+    const adapter = resolveAdapter(config.roles.planner, config);
+    const result = await adapter.execute({
+      prompt,
+      cwd: session.repoLocalPath ?? ".",
+      timeout: 0,
+      onOutput: (chunk: string) => {
+        panel.appendOutput(plannerId, chunk);
+        writeEvent(sessionId, { type: "output", id: plannerId, chunk });
+      },
+    });
+    panel.completeAgent(plannerId, true);
+    writeEvent(sessionId, { type: "agent-end", id: plannerId, success: true });
 
-  addMessage(
-    sessionId,
-    "system",
-    `Iteration ${iterNum}: ${delta.summary}\nModified: ${delta.modifiedTasks.length} tasks, New: ${delta.newTasks.length} tasks`,
-  );
+    // Parse the plan delta
+    const delta = parsePlanDelta(result.output);
 
-  // Apply delta
-  applyPlanDelta(sessionId, delta);
+    // Track iteration
+    const iterNum = createIteration(sessionId, feedbackText, delta);
+
+    addMessage(
+      sessionId,
+      "system",
+      `Iteration ${iterNum}: ${delta.summary}\nModified: ${delta.modifiedTasks.length} tasks, New: ${delta.newTasks.length} tasks`,
+    );
+
+    // Apply delta
+    applyPlanDelta(sessionId, delta);
+  } else {
+    addMessage(sessionId, "system", "Build was interrupted — retrying all tasks...");
+    console.log("Build was interrupted — retrying all tasks...\n");
+  }
 
   // Re-run orchestrator on modified/new tasks
   const repoPath = session.repoLocalPath!;
@@ -317,9 +326,22 @@ export async function handleFeedback(
       panel.completeAgent(id, success);
       writeEvent(sessionId, { type: "agent-end", id, success });
     },
+    onInputNeeded: async (taskId, role, promptText) => {
+      const requestId = `input-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      writeEvent(sessionId, { type: "input-needed", id: requestId, taskId, role, promptText, requestId });
+      const { waitForResponse } = await import("../session/agent-log.js");
+      return waitForResponse(sessionId, requestId);
+    },
   };
 
-  await runOrchestrator(sessionId, repoPath, sessionBranch, callbacks);
+  try {
+    await runOrchestrator(sessionId, repoPath, sessionBranch, callbacks);
+  } catch (err) {
+    panel.destroy();
+    writeEvent(sessionId, { type: "build-complete", id: "build" });
+    try { transition(sessionId, "awaiting_feedback"); } catch { /* already transitioned */ }
+    throw err;
+  }
   panel.destroy();
   writeEvent(sessionId, { type: "build-complete", id: "build" });
 
@@ -331,14 +353,27 @@ export async function handleFeedback(
     addMessage(sessionId, "system", `Failed to push: ${errMsg}`);
   }
 
-  // Update iteration status
-  db.update(iterations)
-    .set({ status: "done" })
-    .where(eq(iterations.sessionId, sessionId))
-    .run();
-
   // Transition back
   transition(sessionId, "awaiting_feedback");
 
-  addMessage(sessionId, "system", `Iteration ${iterNum} complete. PR updated.`);
+  if (!allQueued) {
+    // Update only the current iteration status (not all iterations)
+    // Find the latest iteration number for this session
+    const latestIter = getIterationHistory(sessionId);
+    const latestNum = latestIter.length > 0 ? latestIter[latestIter.length - 1].iterationNumber : null;
+    if (latestNum !== null) {
+      db.update(iterations)
+        .set({ status: "done" })
+        .where(
+          and(
+            eq(iterations.sessionId, sessionId),
+            eq(iterations.iterationNumber, latestNum),
+          ),
+        )
+        .run();
+    }
+    addMessage(sessionId, "system", `Iteration complete. PR updated.`);
+  } else {
+    addMessage(sessionId, "system", "Build retry complete.");
+  }
 }

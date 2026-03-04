@@ -1,6 +1,14 @@
 #!/usr/bin/env node
 
+import { createRequire } from "module";
 import { Command } from "commander";
+import { installShutdownHandlers } from "./lifecycle.js";
+import { setConfigOverrides } from "./config/loader.js";
+
+installShutdownHandlers();
+
+const require = createRequire(import.meta.url);
+const pkg = require("../package.json") as { version: string };
 
 const program = new Command();
 
@@ -9,11 +17,21 @@ program
   .description(
     "Autonomous coding agent orchestrator — turns high-level goals into PR'd code",
   )
-  .version("0.1.0")
+  .version(pkg.version)
   .option("--coder <agent>", "Override coder agent for this session")
   .option("--reviewer <agent>", "Override reviewer agent for this session")
   .option("--parallel <count>", "Override max parallel tasks", parseInt)
   .option("--config <path>", "Use custom config file path");
+
+// Apply global CLI overrides before any command runs
+program.hook("preAction", () => {
+  const opts = program.opts();
+  setConfigOverrides({
+    coder: opts.coder,
+    reviewer: opts.reviewer,
+    parallel: opts.parallel,
+  });
+});
 
 program
   .command("create")
@@ -97,8 +115,8 @@ program
 
 program
   .command("delete")
-  .description("Delete a session and its data")
-  .argument("<session_id>", "Session ID to delete")
+  .description("Delete a session and its data (use --all to delete all)")
+  .argument("<session_id>", 'Session ID to delete, or "--all" for all sessions')
   .action(async (sessionId: string) => {
     try {
       const { handleDelete } = await import("./commands/delete.js");
@@ -119,11 +137,28 @@ program
     console.log(formatInitOutput(result));
   });
 
+// Apply overrides for REPL mode too (no subcommand)
+function applyOverrides(): void {
+  // Parse known options from argv without triggering command handlers
+  const opts = program.opts();
+  setConfigOverrides({
+    coder: opts.coder,
+    reviewer: opts.reviewer,
+    parallel: opts.parallel,
+  });
+}
+
 // Detect if no subcommand was provided → launch interactive REPL
 const args = process.argv.slice(2);
 const hasSubcommand = args.some((a) => !a.startsWith("-"));
-if (!hasSubcommand || args.length === 0) {
-  import("./repl/repl.js").then(({ runRepl }) => runRepl());
-} else {
+const hasVersionOrHelp = args.includes("--version") || args.includes("-V") || args.includes("--help") || args.includes("-h");
+
+if (hasVersionOrHelp || hasSubcommand) {
+  // Let Commander handle subcommands, --version, and --help
   program.parse();
+} else if (args.length === 0 || !hasSubcommand) {
+  // No subcommand — launch interactive REPL
+  program.parseOptions(process.argv);
+  applyOverrides();
+  import("./repl/repl.js").then(({ runRepl }) => runRepl());
 }

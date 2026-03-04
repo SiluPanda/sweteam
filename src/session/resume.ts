@@ -19,6 +19,14 @@ export function canResume(sessionId: string): {
     };
   }
 
+  if (session.status === "building") {
+    return {
+      resumable: true,
+      allowedActions: ["@build", "chat"],
+      message: `Build was interrupted. Type @build to restart, or send feedback.`,
+    };
+  }
+
   if (session.status === "awaiting_feedback") {
     return {
       resumable: true,

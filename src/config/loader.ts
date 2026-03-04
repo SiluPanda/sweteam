@@ -53,20 +53,50 @@ const DEFAULT_CONFIG: SweteamConfig = {
   },
 };
 
+/** CLI overrides passed from command-line flags. */
+export interface ConfigOverrides {
+  coder?: string;
+  reviewer?: string;
+  parallel?: number;
+}
+
+let _overrides: ConfigOverrides = {};
+
+/** Set global CLI overrides (called once at startup from index.ts). */
+export function setConfigOverrides(overrides: ConfigOverrides): void {
+  _overrides = overrides;
+}
+
 export function loadConfig(configPath: string = CONFIG_PATH): SweteamConfig {
+  let config: SweteamConfig;
+
   if (!existsSync(configPath)) {
-    return { ...DEFAULT_CONFIG };
+    config = {
+      roles: { ...DEFAULT_CONFIG.roles },
+      execution: { ...DEFAULT_CONFIG.execution },
+      git: { ...DEFAULT_CONFIG.git },
+      agents: { ...DEFAULT_CONFIG.agents },
+    };
+  } else {
+    const raw = readFileSync(configPath, "utf-8");
+    const parsed = parseTOML(raw) as unknown as Partial<SweteamConfig>;
+
+    config = {
+      roles: { ...DEFAULT_CONFIG.roles, ...parsed.roles },
+      execution: { ...DEFAULT_CONFIG.execution, ...parsed.execution },
+      git: { ...DEFAULT_CONFIG.git, ...parsed.git },
+      agents: { ...DEFAULT_CONFIG.agents, ...parsed.agents },
+    };
   }
 
-  const raw = readFileSync(configPath, "utf-8");
-  const parsed = parseTOML(raw) as unknown as Partial<SweteamConfig>;
+  // Apply CLI overrides
+  if (_overrides.coder) config.roles.coder = _overrides.coder;
+  if (_overrides.reviewer) config.roles.reviewer = _overrides.reviewer;
+  if (_overrides.parallel && _overrides.parallel > 0) {
+    config.execution.max_parallel = _overrides.parallel;
+  }
 
-  return {
-    roles: { ...DEFAULT_CONFIG.roles, ...parsed.roles },
-    execution: { ...DEFAULT_CONFIG.execution, ...parsed.execution },
-    git: { ...DEFAULT_CONFIG.git, ...parsed.git },
-    agents: { ...DEFAULT_CONFIG.agents, ...parsed.agents },
-  };
+  return config;
 }
 
 export { CONFIG_PATH, DEFAULT_CONFIG, stringifyTOML };

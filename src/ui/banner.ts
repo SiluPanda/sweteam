@@ -1,7 +1,10 @@
 import chalk from "chalk";
 import os from "os";
+import { createRequire } from "module";
 
-const VERSION = "0.1.0";
+const require = createRequire(import.meta.url);
+const pkg = require("../../package.json") as { version: string };
+const VERSION = pkg.version;
 
 // ── Blue theme palette ──────────────────────────────────────────────
 const border = chalk.blue;

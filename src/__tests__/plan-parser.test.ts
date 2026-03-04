@@ -117,6 +117,38 @@ Depends:
     expect(result.tasks[1].id).toBe("task-002");
   });
 
+  it("should strip markdown bold from task IDs (JSON)", () => {
+    const input = JSON.stringify([
+      { id: "**1**", title: "First", description: "D" },
+      { id: "**2**", title: "Second", description: "D" },
+    ]);
+
+    const result = parsePlan(input);
+    expect(result.tasks[0].id).toBe("1");
+    expect(result.tasks[1].id).toBe("2");
+  });
+
+  it("should strip markdown bold from task IDs (table)", () => {
+    const input = `
+| ID | Title | Description |
+|----|-------|-------------|
+| **1** | Add dep | Install package |
+| **2** | Add cache | Implement caching |`;
+
+    const result = parsePlan(input);
+    expect(result.tasks[0].id).toBe("1");
+    expect(result.tasks[1].id).toBe("2");
+  });
+
+  it("should strip inline code from task IDs", () => {
+    const input = JSON.stringify([
+      { id: "`task-1`", title: "First", description: "D" },
+    ]);
+
+    const result = parsePlan(input);
+    expect(result.tasks[0].id).toBe("task-1");
+  });
+
   it("should return empty tasks for unparseable output", () => {
     const result = parsePlan("Just some random text with no structure");
     expect(result.tasks).toEqual([]);

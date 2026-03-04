@@ -16,8 +16,8 @@ describe("CLI entry point (src/index.ts)", () => {
     expect(indexContent).toContain('.name("sweteam")');
   });
 
-  it("should set version", () => {
-    expect(indexContent).toContain('.version("0.1.0")');
+  it("should set version from package.json", () => {
+    expect(indexContent).toContain(".version(pkg.version)");
   });
 
   it("should register create command", () => {

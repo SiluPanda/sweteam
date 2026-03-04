@@ -86,6 +86,7 @@ export async function runTask(
   sessionBranch: string,
   repoPath: string,
   onOutput?: (chunk: string) => void,
+  onInputNeeded?: (promptText: string) => Promise<string | null>,
 ): Promise<{ success: boolean; output: string; diff: string }> {
   const config = loadConfig();
   const db = getDb();
@@ -122,6 +123,7 @@ export async function runTask(
       cwd: repoPath,
       timeout: 0,
       onOutput,
+      onInputNeeded,
     });
 
     // Commit any uncommitted changes the coder left behind

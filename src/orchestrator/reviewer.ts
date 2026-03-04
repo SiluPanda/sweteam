@@ -4,6 +4,7 @@ import { tasks } from "../db/schema.js";
 import { squashMerge, git } from "../git/git.js";
 import { resolveAdapter } from "../adapters/adapter.js";
 import { loadConfig } from "../config/loader.js";
+import { displayTaskId } from "./orchestrator.js";
 import type { TaskRecord } from "./task-runner.js";
 
 export interface ReviewResult {
@@ -64,11 +65,11 @@ export function parseReviewResponse(output: string): ReviewResult {
       summary: String(parsed.summary ?? ""),
     };
   } catch {
-    // If parsing fails, treat as approval (conservative)
+    // If parsing fails, reject — never auto-approve unreviewed code
     return {
-      verdict: "approve",
-      issues: [],
-      summary: "Review response could not be parsed; auto-approving.",
+      verdict: "request_changes",
+      issues: [{ message: "Review response could not be parsed as valid JSON" }],
+      summary: "Review response could not be parsed; requesting changes as a safety measure.",
     };
   }
 }
@@ -78,6 +79,7 @@ export async function reviewTask(
   diff: string,
   repoPath: string,
   onOutput?: (chunk: string) => void,
+  onInputNeeded?: (promptText: string) => Promise<string | null>,
 ): Promise<ReviewResult> {
   const config = loadConfig();
   const adapter = resolveAdapter(config.roles.reviewer, config);
@@ -89,6 +91,7 @@ export async function reviewTask(
     cwd: repoPath,
     timeout: 0,
     onOutput,
+    onInputNeeded,
   });
 
   return parseReviewResponse(result.output);
@@ -108,7 +111,7 @@ export function mergeTask(
   squashMerge(
     task.branchName,
     sessionBranch,
-    `feat: ${task.title} (#${task.id})`,
+    `feat: ${task.title} (#${displayTaskId(task.id)})`,
     repoPath,
   );
 
@@ -127,15 +130,16 @@ export async function reviewAndMerge(
   repoPath: string,
   maxCycles: number = 3,
   onOutput?: (chunk: string) => void,
+  onInputNeeded?: (promptText: string) => Promise<string | null>,
 ): Promise<{ merged: boolean; reviewResult: ReviewResult }> {
   const config = loadConfig();
   const db = getDb();
 
   for (let cycle = 0; cycle < maxCycles; cycle++) {
     // Always get a fresh diff for this review cycle
-    const diff = git(`diff ${sessionBranch}...${task.branchName}`, repoPath);
+    const diff = git(["diff", `${sessionBranch}...${task.branchName}`], repoPath);
 
-    const reviewResult = await reviewTask(task, diff, repoPath, onOutput);
+    const reviewResult = await reviewTask(task, diff, repoPath, onOutput, onInputNeeded);
 
     // Update review info in DB
     db.update(tasks)
@@ -172,12 +176,13 @@ Summary: ${reviewResult.summary}`;
         cwd: repoPath,
         timeout: 0,
         onOutput,
+        onInputNeeded,
       });
 
       // Re-commit fixes
       try {
-        git("add -A", repoPath);
-        git(`commit -m "fix(${task.id}): address review feedback (cycle ${cycle + 2})"`, repoPath);
+        git(["add", "-A"], repoPath);
+        git(["commit", "-m", `fix(${displayTaskId(task.id)}): address review feedback (cycle ${cycle + 2})`], repoPath);
       } catch {
         // No changes to commit
       }

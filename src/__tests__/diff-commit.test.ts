@@ -72,11 +72,11 @@ describe("git/git — diff and commit functions", () => {
 
     commitAll("feat: add two files", dir);
 
-    const log = git("log --oneline -1", dir);
+    const log = git(["log", "--oneline", "-1"], dir);
     expect(log).toContain("feat: add two files");
 
     // Working tree should be clean
-    const status = git("status --porcelain", dir);
+    const status = git(["status", "--porcelain"], dir);
     expect(status).toBe("");
   });
 
@@ -86,7 +86,7 @@ describe("git/git — diff and commit functions", () => {
 
     commitAll('feat(task-001): add "quoted" feature', dir);
 
-    const log = git("log --oneline -1", dir);
+    const log = git(["log", "--oneline", "-1"], dir);
     expect(log).toContain("feat(task-001)");
   });
 });

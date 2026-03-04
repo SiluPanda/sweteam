@@ -12,13 +12,16 @@ import { SWETEAM_DIR } from "../db/client.js";
 const LOG_DIR = join(SWETEAM_DIR, "logs");
 
 export interface AgentEvent {
-  type: "agent-start" | "output" | "agent-end" | "build-complete";
+  type: "agent-start" | "output" | "agent-end" | "build-complete" | "input-needed" | "input-response";
   id: string;
   role?: string;
   taskId?: string;
   title?: string;
   chunk?: string;
   success?: boolean;
+  promptText?: string;
+  requestId?: string;
+  response?: string;
   ts: number;
 }
 
@@ -47,6 +50,34 @@ export interface LogWatcher {
  * Watch a session's agent log file for new events. Replays existing events
  * from the beginning, then polls for new content every 200ms.
  */
+/**
+ * Check whether a session's log file has recent activity, indicating a build
+ * is actively running (not a stale leftover from a crashed build).
+ */
+export function isLogActive(sessionId: string, staleThresholdMs: number = 10_000): boolean {
+  const logPath = getLogPath(sessionId);
+  if (!existsSync(logPath)) return false;
+
+  try {
+    const content = readFileSync(logPath, "utf-8").trim();
+    if (!content) return false;
+
+    // Check the last event's timestamp
+    const lines = content.split("\n").filter(Boolean);
+    const lastLine = lines[lines.length - 1];
+    const lastEvent = JSON.parse(lastLine) as AgentEvent;
+
+    // If the last event is build-complete, the build is done
+    if (lastEvent.type === "build-complete") return false;
+
+    // If the last event was written recently, the build is likely still active
+    const age = Date.now() - lastEvent.ts;
+    return age < staleThresholdMs;
+  } catch {
+    return false;
+  }
+}
+
 export function watchLog(
   sessionId: string,
   onEvent: (event: AgentEvent) => void,
@@ -91,4 +122,42 @@ export function watchLog(
       clearInterval(timer);
     },
   };
+}
+
+/**
+ * Wait for an `input-response` event matching the given requestId.
+ * Polls the log file every 200ms. Times out after `timeoutMs` (default 5 min).
+ */
+export function waitForResponse(
+  sessionId: string,
+  requestId: string,
+  timeoutMs: number = 5 * 60 * 1000,
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    const deadline = Date.now() + timeoutMs;
+    let resolved = false;
+
+    const watcher = watchLog(sessionId, (event) => {
+      if (resolved) return;
+      if (event.type === "input-response" && event.requestId === requestId) {
+        resolved = true;
+        watcher.stop();
+        resolve(event.response ?? null);
+      }
+    });
+
+    // Timeout check
+    const timer = setInterval(() => {
+      if (resolved) {
+        clearInterval(timer);
+        return;
+      }
+      if (Date.now() > deadline) {
+        clearInterval(timer);
+        resolved = true;
+        watcher.stop();
+        resolve(null);
+      }
+    }, 1000);
+  });
 }

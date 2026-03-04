@@ -3,66 +3,172 @@ import chalk from "chalk";
 /**
  * Streaming-friendly markdown renderer for terminal output.
  * Processes one line at a time, tracking state across lines
- * (e.g. code block boundaries).
+ * (e.g. code block boundaries, table accumulation).
  */
 export class MarkdownRenderer {
   private inCodeBlock = false;
+  private tableBuffer: string[] = [];
 
-  renderLine(line: string): string {
+  /**
+   * Render a single input line. Returns an array of rendered lines.
+   * May return an empty array when buffering table rows (the table
+   * is emitted once a non-table line arrives or flush() is called).
+   */
+  renderLine(line: string): string[] {
     // Code block toggle: ```lang or ```
     if (/^\s*```/.test(line)) {
+      const flushed = this.flushTable();
       this.inCodeBlock = !this.inCodeBlock;
       if (this.inCodeBlock) {
         const lang = line.replace(/^\s*```/, "").trim();
         const label = lang ? ` ${lang} ` : "";
         const ruleLen = Math.max(0, 40 - label.length);
-        return chalk.dim(`  ${"─".repeat(2)}${label}${"─".repeat(ruleLen)}`);
+        return [...flushed, chalk.dim(`  ${"─".repeat(2)}${label}${"─".repeat(ruleLen)}`)];
       }
-      return chalk.dim(`  ${"─".repeat(42)}`);
+      return [...flushed, chalk.dim(`  ${"─".repeat(42)}`)];
     }
 
     // Inside code block — show dimmed with a gutter
     if (this.inCodeBlock) {
-      return chalk.dim(`  ${line}`);
+      return [chalk.dim(`  ${line}`)];
     }
+
+    // Table row: buffer lines that look like | … | for batch rendering
+    if (isTableRow(line)) {
+      this.tableBuffer.push(line);
+      return [];
+    }
+
+    // Non-table line — flush any buffered table first
+    const flushed = this.flushTable();
 
     // Heading: # … through ######
     const headerMatch = line.match(/^(#{1,6})\s+(.*)/);
     if (headerMatch) {
       const level = headerMatch[1].length;
       const text = renderInline(headerMatch[2]);
-      if (level === 1) return "\n" + chalk.bold.underline(text);
-      if (level === 2) return "\n" + chalk.bold(text);
-      return chalk.bold(text);
+      if (level === 1) return [...flushed, "\n" + chalk.bold.underline(text)];
+      if (level === 2) return [...flushed, "\n" + chalk.bold(text)];
+      return [...flushed, chalk.bold(text)];
     }
 
     // Horizontal rule: --- / *** / ___
     if (/^\s*[-*_]{3,}\s*$/.test(line)) {
-      return chalk.dim("─".repeat(40));
+      return [...flushed, chalk.dim("─".repeat(40))];
     }
 
     // Blockquote: > text
     const bqMatch = line.match(/^>\s?(.*)/);
     if (bqMatch) {
-      return chalk.dim("  │ ") + renderInline(bqMatch[1]);
+      return [...flushed, chalk.dim("  │ ") + renderInline(bqMatch[1])];
     }
 
     // Unordered list item: - / * / + followed by space
     const ulMatch = line.match(/^(\s*)[-*+]\s+(.*)/);
     if (ulMatch) {
-      return `${ulMatch[1]}  ${chalk.dim("•")} ${renderInline(ulMatch[2])}`;
+      return [...flushed, `${ulMatch[1]}  ${chalk.dim("•")} ${renderInline(ulMatch[2])}`];
     }
 
     // Ordered list item: 1. text
     const olMatch = line.match(/^(\s*)(\d+)\.\s+(.*)/);
     if (olMatch) {
-      return `${olMatch[1]}  ${chalk.dim(olMatch[2] + ".")} ${renderInline(olMatch[3])}`;
+      return [...flushed, `${olMatch[1]}  ${chalk.dim(olMatch[2] + ".")} ${renderInline(olMatch[3])}`];
     }
 
     // Regular line — just apply inline formatting
-    return renderInline(line);
+    return [...flushed, renderInline(line)];
+  }
+
+  /** Flush any buffered table rows. Call when agent output ends. */
+  flush(): string[] {
+    return this.flushTable();
+  }
+
+  private flushTable(): string[] {
+    if (this.tableBuffer.length === 0) return [];
+    const lines = renderTable(this.tableBuffer);
+    this.tableBuffer = [];
+    return lines;
   }
 }
+
+/* ── Table helpers ─────────────────────────────────────────────── */
+
+function isTableRow(line: string): boolean {
+  const trimmed = line.trim();
+  // Must contain pipes and start/end with a pipe (standard markdown table row)
+  return /^\|.*\|$/.test(trimmed) && trimmed.length > 2;
+}
+
+function isSeparatorRow(line: string): boolean {
+  return /^\s*\|[\s:|-]+\|\s*$/.test(line);
+}
+
+function parseCells(line: string): string[] {
+  const cells = line.trim().split("|").map((c) => c.trim());
+  if (cells.length > 0 && cells[0] === "") cells.shift();
+  if (cells.length > 0 && cells[cells.length - 1] === "") cells.pop();
+  return cells;
+}
+
+function renderTable(bufferedLines: string[]): string[] {
+  // Separate header and data rows (skip separator rows)
+  const rows: string[][] = [];
+  for (const line of bufferedLines) {
+    if (isSeparatorRow(line)) continue;
+    const cells = parseCells(line);
+    if (cells.length > 0) rows.push(cells);
+  }
+
+  if (rows.length === 0) return bufferedLines; // fallback to raw lines
+
+  // Normalise column count
+  const maxCols = Math.max(...rows.map((r) => r.length));
+  for (const row of rows) {
+    while (row.length < maxCols) row.push("");
+  }
+
+  // Calculate column widths, capped at 30 visible chars
+  const MAX_COL = 30;
+  const colW: number[] = new Array(maxCols).fill(0);
+  for (const row of rows) {
+    for (let j = 0; j < maxCols; j++) {
+      colW[j] = Math.min(MAX_COL, Math.max(colW[j], row[j].length));
+    }
+  }
+
+  const dim = chalk.dim;
+  const pad = (s: string, w: number): string => {
+    if (s.length > w) return s.slice(0, w - 1) + "…";
+    return s.padEnd(w);
+  };
+
+  const out: string[] = [];
+
+  // Top border: ┌──┬──┐
+  out.push(dim("  ┌" + colW.map((w) => "─".repeat(w + 2)).join("┬") + "┐"));
+
+  for (let i = 0; i < rows.length; i++) {
+    const cells = rows[i].map((c, j) => {
+      const content = pad(c, colW[j]);
+      // First row is the header — render bold
+      return i === 0 ? chalk.bold(content) : renderInline(content);
+    });
+    out.push(dim("  │") + cells.map((c) => ` ${c} `).join(dim("│")) + dim("│"));
+
+    // Separator after header: ├──┼──┤
+    if (i === 0) {
+      out.push(dim("  ├" + colW.map((w) => "─".repeat(w + 2)).join("┼") + "┤"));
+    }
+  }
+
+  // Bottom border: └──┴──┘
+  out.push(dim("  └" + colW.map((w) => "─".repeat(w + 2)).join("┴") + "┘"));
+
+  return out;
+}
+
+/* ── Inline formatting ─────────────────────────────────────────── */
 
 /**
  * Apply inline markdown formatting to a single line of text.

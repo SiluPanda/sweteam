@@ -55,8 +55,8 @@ describe("session/state-machine — validateTransition", () => {
     expect(validateTransition("building", "building")).toBe(true);
   });
 
-  it("should reject awaiting_feedback -> building", () => {
-    expect(validateTransition("awaiting_feedback", "building")).toBe(false);
+  it("should allow awaiting_feedback -> building (rebuild)", () => {
+    expect(validateTransition("awaiting_feedback", "building")).toBe(true);
   });
 });
 

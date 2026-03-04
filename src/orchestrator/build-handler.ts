@@ -13,7 +13,7 @@ import {
 } from "./orchestrator.js";
 import { git, pushBranch, createPR, getDefaultBranch, deleteBranches } from "../git/git.js";
 import { AgentPanel } from "../ui/agent-panel.js";
-import { clearLog, writeEvent } from "../session/agent-log.js";
+import { clearLog, writeEvent, waitForResponse } from "../session/agent-log.js";
 
 export function generatePrBody(
   goal: string,
@@ -200,6 +200,11 @@ export async function handleBuild(
       const id = `${role.toLowerCase()}-${agentCounter}`;
       panel.completeAgent(id, success);
       writeEvent(sessionId, { type: "agent-end", id, success });
+    },
+    onInputNeeded: async (taskId, role, promptText) => {
+      const requestId = `input-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      writeEvent(sessionId, { type: "input-needed", id: requestId, taskId, role, promptText, requestId });
+      return waitForResponse(sessionId, requestId);
     },
   };
 

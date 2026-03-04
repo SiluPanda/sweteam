@@ -71,14 +71,16 @@ export class AgentPanel {
       const fullLine = slot.lineBuffer + segment;
 
       // Always pass through renderer to keep state (code block tracking) in sync
-      const rendered = slot.renderer.renderLine(fullLine);
+      const renderedLines = slot.renderer.renderLine(fullLine);
 
       if (slot.midLine) {
         // Already showed partial content raw — just finish the line
         process.stdout.write(segment + "\n");
       } else {
-        // Full line arrived at once — show the markdown-rendered version
-        process.stdout.write(prefix + rendered + "\n");
+        // Full line arrived at once — show the markdown-rendered version(s)
+        for (const rl of renderedLines) {
+          process.stdout.write(prefix + rl + "\n");
+        }
       }
 
       slot.lineBuffer = "";
@@ -98,6 +100,15 @@ export class AgentPanel {
       process.stdout.write("\n");
       slot.lineBuffer = "";
       slot.midLine = false;
+    }
+
+    // Flush any buffered table rows
+    const remaining = slot.renderer.flush();
+    if (remaining.length > 0) {
+      const prefix = border("│ ");
+      for (const rl of remaining) {
+        process.stdout.write(prefix + rl + "\n");
+      }
     }
 
     // Print footer
