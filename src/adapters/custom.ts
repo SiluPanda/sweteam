@@ -63,6 +63,10 @@ export class CustomAdapter implements AgentAdapter {
       let recentOutput = "";
       let debounceTimer: ReturnType<typeof setTimeout> | null = null;
       let waitingForInput = false;
+      let settled = false;
+
+      // Prevent EPIPE crashes
+      proc.stdin.on("error", () => {});
 
       proc.stdout.on("data", (chunk: Buffer) => {
         const text = chunk.toString();
@@ -80,7 +84,7 @@ export class CustomAdapter implements AgentAdapter {
 
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
-          if (waitingForInput) return;
+          if (waitingForInput || settled) return;
           if (detectInputPrompt(recentOutput)) {
             waitingForInput = true;
             const promptText = extractPromptText(recentOutput);
@@ -89,6 +93,9 @@ export class CustomAdapter implements AgentAdapter {
               if (response !== null && !proc.killed) {
                 proc.stdin.write(response + "\n");
               }
+              recentOutput = "";
+            }).catch(() => {
+              waitingForInput = false;
               recentOutput = "";
             });
           }
@@ -100,6 +107,7 @@ export class CustomAdapter implements AgentAdapter {
       });
 
       const timer = timeout > 0 ? setTimeout(() => {
+        settled = true;
         proc.kill("SIGTERM");
         cleanup();
         reject(new Error(`${this.name} timed out after ${timeout}ms`));
@@ -116,6 +124,9 @@ export class CustomAdapter implements AgentAdapter {
       proc.on("close", (code) => {
         if (timer) clearTimeout(timer);
         if (debounceTimer) clearTimeout(debounceTimer);
+        if (settled) { cleanup(); return; }
+        settled = true;
+
         let output = stdout || stderr;
 
         if (outputFrom === "file") {
@@ -137,6 +148,8 @@ export class CustomAdapter implements AgentAdapter {
       proc.on("error", (err) => {
         if (timer) clearTimeout(timer);
         if (debounceTimer) clearTimeout(debounceTimer);
+        if (settled) return;
+        settled = true;
         cleanup();
         reject(err);
       });
@@ -148,10 +161,13 @@ export class CustomAdapter implements AgentAdapter {
           proc.stdin.end();
         } else {
           proc.on("close", () => {
-            if (!proc.stdin.destroyed) {
-              proc.stdin.end();
-            }
+            try { if (!proc.stdin.destroyed) proc.stdin.end(); } catch { /* already closed */ }
           });
+        }
+      } else {
+        // For arg/file prompt modes, close stdin immediately to prevent agent from blocking on stdin read
+        if (!opts.onInputNeeded) {
+          proc.stdin.end();
         }
       }
     });

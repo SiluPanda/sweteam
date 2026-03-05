@@ -4,14 +4,15 @@
 
 /** Patterns that indicate the CLI is prompting for input. */
 const PROMPT_PATTERNS = [
-  /\?\s+$/,                    // "? Do you want to continue? "
+  /\?\s*$/,                    // "Do you want to continue? "
   /\(y\/n\)\s*:?\s*$/i,       // "(y/n)" or "(y/n):"
   /\[yes\/no\]\s*:?\s*$/i,    // "[yes/no]:"
   /\[y\/N\]\s*:?\s*$/i,       // "[y/N]"
   /\[Y\/n\]\s*:?\s*$/i,       // "[Y/n]"
-  /:\s*$/,                     // ends with ":"
-  />\s*$/,                     // ends with ">"
-  /\)\s*$/,                    // ends with ")" — e.g. "(yes/no)"
+  /\(yes\/no\)\s*:?\s*$/i,    // "(yes/no):"
+  /continue\?\s*$/i,           // "Do you want to continue?"
+  /proceed\?\s*$/i,            // "Do you want to proceed?"
+  /overwrite\?\s*$/i,          // "Overwrite?"
 ];
 
 /** Patterns that are false positives — output that ends with prompt-like chars but isn't a prompt. */
@@ -19,9 +20,11 @@ const FALSE_POSITIVE_PATTERNS = [
   /^#+\s/m,                    // markdown heading "# ..."
   /^\s*\/\//m,                 // code comment "// ..."
   /```/,                       // inside a code block
-  /https?:\/\//,               // URL ending with ":"
+  /https?:\/\//,               // URL
   /^\s*\d+\.\s/m,              // numbered list item
-  /^\s*-\s/m,                  // bulleted list (only when it's the last line)
+  /^\s*-\s/m,                  // bulleted list
+  /[{}\[\],;]/,                // JSON/code syntax
+  /^\s{4,}/,                   // indented code (4+ spaces)
 ];
 
 /**

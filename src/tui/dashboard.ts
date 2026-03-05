@@ -25,6 +25,8 @@ function statusIcon(status: string): string {
       return "✗";
     case "blocked":
       return "⊘";
+    case "queued":
+      return "◌";
     default:
       return "○";
   }
@@ -75,8 +77,9 @@ export function Dashboard({ tasks, sessionId }: DashboardProps): React.ReactElem
   const failed = tasks.filter((t) => t.status === "failed").length;
   const queued = tasks.filter((t) => t.status === "queued").length;
 
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-  const bar = "█".repeat(Math.floor(pct / 5)) + "░".repeat(20 - Math.floor(pct / 5));
+  const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+  const filled = Math.min(20, Math.max(0, Math.floor(pct / 5)));
+  const bar = "█".repeat(filled) + "░".repeat(20 - filled);
 
   return React.createElement(
     Box,
@@ -87,8 +90,8 @@ export function Dashboard({ tasks, sessionId }: DashboardProps): React.ReactElem
       `Task Dashboard — ${sessionId}`,
     ),
     React.createElement(Box, { marginTop: 1 }),
-    ...tasks.map((task, i) =>
-      React.createElement(TaskRow, { key: i, task }),
+    ...tasks.map((task) =>
+      React.createElement(TaskRow, { key: task.id, task }),
     ),
     React.createElement(Box, { marginTop: 1 }),
     React.createElement(
@@ -99,7 +102,7 @@ export function Dashboard({ tasks, sessionId }: DashboardProps): React.ReactElem
     React.createElement(
       Text,
       { dimColor: true },
-      `Done: ${done} | Running: ${running} | Queued: ${queued} | Failed: ${failed}`,
+      `Done: ${done} | Running: ${running + tasks.filter((t) => t.status === "reviewing" || t.status === "fixing").length} | Queued: ${queued} | Failed: ${failed}${tasks.filter((t) => t.status === "blocked").length > 0 ? ` | Blocked: ${tasks.filter((t) => t.status === "blocked").length}` : ""}`,
     ),
   );
 }

@@ -349,6 +349,12 @@ async function dispatch(command: string, args: string[]): Promise<void> {
         } else {
           console.log("Send feedback or @feedback <text>.\n");
         }
+      } else if (session.status === "stopped") {
+        if (session.planJson) {
+          console.log("Session stopped. Type @build to rebuild, or chat to refine the plan.\n");
+        } else {
+          console.log("Session stopped. Send a message to resume planning.\n");
+        }
       } else if (session.status === "planning" && session.planJson) {
         console.log("A plan exists. Type @build or continue chatting.\n");
       } else if (session.status === "planning") {

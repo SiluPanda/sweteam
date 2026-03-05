@@ -10,7 +10,7 @@ export function trackProcess(proc: ChildProcess): void {
   proc.on("error", () => activeProcesses.delete(proc));
 }
 
-function killAllProcesses(): void {
+export function killAllProcesses(): void {
   for (const proc of activeProcesses) {
     try {
       proc.kill("SIGTERM");
@@ -50,8 +50,8 @@ function handleShutdown(signal: string): void {
   killAllProcesses();
   closeDb();
 
-  // Use a short delay to allow cleanup, then exit
-  setTimeout(() => process.exit(0), 500);
+  // Delay must exceed the SIGKILL fallback (2000ms) to avoid orphaning processes
+  setTimeout(() => process.exit(0), 3000);
 }
 
 export function installShutdownHandlers(): void {
@@ -64,6 +64,7 @@ export function installShutdownHandlers(): void {
 
   process.on("uncaughtException", (err) => {
     console.error("Uncaught exception:", err.message);
+    killAllProcesses();
     closeDb();
     process.exit(1);
   });

@@ -11,10 +11,10 @@ export type SessionStatus =
 
 const VALID_TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
   planning: ["building", "stopped"],
-  building: ["building", "awaiting_feedback", "planning", "stopped"],
+  building: ["awaiting_feedback", "planning", "stopped"],
   awaiting_feedback: ["building", "iterating", "stopped"],
-  iterating: ["awaiting_feedback", "stopped"],
-  stopped: ["building", "iterating"],
+  iterating: ["awaiting_feedback", "planning", "stopped"],
+  stopped: ["planning", "building"],
 };
 
 export function validateTransition(
@@ -52,7 +52,7 @@ export function transition(sessionId: string, newStatus: SessionStatus): void {
   };
 
   if (newStatus === "stopped") {
-    updates.stoppedAt = new Date();
+    updates.stoppedAt = updates.updatedAt;
   }
 
   db.update(sessions).set(updates).where(eq(sessions.id, sessionId)).run();

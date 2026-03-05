@@ -58,6 +58,7 @@ export interface ConfigOverrides {
   coder?: string;
   reviewer?: string;
   parallel?: number;
+  configPath?: string;
 }
 
 let _overrides: ConfigOverrides = {};
@@ -67,10 +68,11 @@ export function setConfigOverrides(overrides: ConfigOverrides): void {
   _overrides = overrides;
 }
 
-export function loadConfig(configPath: string = CONFIG_PATH): SweteamConfig {
+export function loadConfig(configPath?: string): SweteamConfig {
+  const effectivePath = configPath ?? _overrides.configPath ?? CONFIG_PATH;
   let config: SweteamConfig;
 
-  if (!existsSync(configPath)) {
+  if (!existsSync(effectivePath)) {
     config = {
       roles: { ...DEFAULT_CONFIG.roles },
       execution: { ...DEFAULT_CONFIG.execution },
@@ -78,8 +80,14 @@ export function loadConfig(configPath: string = CONFIG_PATH): SweteamConfig {
       agents: { ...DEFAULT_CONFIG.agents },
     };
   } else {
-    const raw = readFileSync(configPath, "utf-8");
-    const parsed = parseTOML(raw) as unknown as Partial<SweteamConfig>;
+    const raw = readFileSync(effectivePath, "utf-8");
+    let parsed: Partial<SweteamConfig>;
+    try {
+      parsed = parseTOML(raw) as unknown as Partial<SweteamConfig>;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Failed to parse config at ${effectivePath}: ${msg}`);
+    }
 
     config = {
       roles: { ...DEFAULT_CONFIG.roles, ...parsed.roles },

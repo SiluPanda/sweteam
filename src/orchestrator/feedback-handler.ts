@@ -13,7 +13,7 @@ import {
   scopeTaskId,
   type OrchestratorCallbacks,
 } from "./orchestrator.js";
-import { pushBranch } from "../git/git.js";
+import { pushBranch, git, deleteBranches } from "../git/git.js";
 import { AgentPanel } from "../ui/agent-panel.js";
 import { clearLog, writeEvent } from "../session/agent-log.js";
 
@@ -134,13 +134,24 @@ export function applyPlanDelta(
 ): void {
   const db = getDb();
 
-  // Re-queue modified tasks
+  // Re-queue modified tasks — append changes to existing description
   for (const mod of delta.modifiedTasks) {
     const dbId = scopeTaskId(sessionId, mod.id);
+    // Read existing description to append changes rather than overwrite
+    const existing = db
+      .select({ description: tasksTable.description })
+      .from(tasksTable)
+      .where(eq(tasksTable.id, dbId))
+      .all();
+    const existingDesc = existing.length > 0 ? existing[0].description : "";
+    const updatedDesc = existingDesc
+      ? `${existingDesc}\n\n--- Feedback Changes ---\n${mod.changes}`
+      : mod.changes;
+
     db.update(tasksTable)
       .set({
         status: "queued",
-        description: mod.changes,
+        description: updatedDesc,
         reviewVerdict: null,
         reviewIssues: null,
         reviewCycles: 0,
@@ -153,21 +164,17 @@ export function applyPlanDelta(
       .run();
   }
 
-  // Insert new tasks
+  // Insert new tasks with correct order offset
   if (delta.newTasks.length > 0) {
-    // Get max order
     const existing = getTasksForSession(sessionId);
-    const maxOrder =
-      existing.length > 0
-        ? Math.max(...existing.map((_, i) => i + 1))
-        : 0;
+    const maxOrder = existing.length;
 
     insertTasksFromPlan(
       sessionId,
       delta.newTasks.map((t, i) => ({
         ...t,
-        // Override order in insertTasksFromPlan
       })),
+      maxOrder,
     );
   }
 }
@@ -275,17 +282,24 @@ export async function handleFeedback(
     writeEvent(sessionId, { type: "agent-start", id: plannerId, role: "Planner", taskId: sessionId, title: "Analyzing feedback" });
     agentCounter++;
     const adapter = resolveAdapter(config.roles.planner, config);
-    const result = await adapter.execute({
-      prompt,
-      cwd: session.repoLocalPath ?? ".",
-      timeout: 0,
-      onOutput: (chunk: string) => {
-        panel.appendOutput(plannerId, chunk);
-        writeEvent(sessionId, { type: "output", id: plannerId, chunk });
-      },
-    });
-    panel.completeAgent(plannerId, true);
-    writeEvent(sessionId, { type: "agent-end", id: plannerId, success: true });
+    let result: { output: string };
+    try {
+      result = await adapter.execute({
+        prompt,
+        cwd: session.repoLocalPath ?? ".",
+        timeout: 0,
+        onOutput: (chunk: string) => {
+          panel.appendOutput(plannerId, chunk);
+          writeEvent(sessionId, { type: "output", id: plannerId, chunk });
+        },
+      });
+      panel.completeAgent(plannerId, true);
+      writeEvent(sessionId, { type: "agent-end", id: plannerId, success: true });
+    } catch (plannerErr) {
+      panel.completeAgent(plannerId, false);
+      writeEvent(sessionId, { type: "agent-end", id: plannerId, success: false });
+      throw plannerErr;
+    }
 
     // Parse the plan delta
     const delta = parsePlanDelta(result.output);
@@ -309,6 +323,21 @@ export async function handleFeedback(
   // Re-run orchestrator on modified/new tasks
   const repoPath = session.repoLocalPath!;
   const sessionBranch = session.workingBranch!;
+
+  // Ensure we're on the session branch before running
+  try {
+    git(["checkout", sessionBranch], repoPath);
+  } catch {
+    // May already be on it
+  }
+
+  // Clean up stale task branches from previous iterations
+  try {
+    deleteBranches(`sw/${session.id}-*`, repoPath);
+    deleteBranches(`sw/${session.id}/*`, repoPath);
+  } catch {
+    // Best-effort cleanup
+  }
 
   const callbacks: OrchestratorCallbacks = {
     onAgentStart: (taskId, taskTitle, role) => {
@@ -353,8 +382,12 @@ export async function handleFeedback(
     addMessage(sessionId, "system", `Failed to push: ${errMsg}`);
   }
 
-  // Transition back
-  transition(sessionId, "awaiting_feedback");
+  // Transition back (may fail if session was stopped during iteration)
+  try {
+    transition(sessionId, "awaiting_feedback");
+  } catch {
+    // Session may have been stopped — that's fine
+  }
 
   if (!allQueued) {
     // Update only the current iteration status (not all iterations)

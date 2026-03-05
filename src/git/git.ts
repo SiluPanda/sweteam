@@ -87,10 +87,13 @@ export function createBranch(
         try { git(["branch", "-D", match[1]], cwd); } catch { /* ignore */ }
       }
       git(["checkout", "-b", name, base], cwd);
-    } else {
-      // Branch already exists — check it out and update it
+    } else if (msg.includes("already exists")) {
+      // Branch already exists — reset it to the base for a clean start
       git(["checkout", name], cwd);
       git(["reset", "--hard", base], cwd);
+    } else {
+      // Unexpected error — do not do destructive operations, re-throw
+      throw err;
     }
   }
 }
@@ -102,8 +105,15 @@ export function squashMerge(
   cwd: string,
 ): void {
   git(["checkout", target], cwd);
-  git(["merge", "--squash", source], cwd);
-  git(["commit", "-m", message], cwd);
+  try {
+    git(["merge", "--squash", source], cwd);
+    git(["commit", "-m", message], cwd);
+  } catch (err) {
+    // Clean up the failed merge to restore a clean working tree
+    try { git(["merge", "--abort"], cwd); } catch { /* no merge in progress */ }
+    try { git(["reset", "--hard", "HEAD"], cwd); } catch { /* best effort */ }
+    throw err;
+  }
   git(["branch", "-D", source], cwd);
 }
 

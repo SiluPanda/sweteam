@@ -42,7 +42,7 @@ function stripInlineMarkdown(text: string): string {
     .replace(/\*\*(.+?)\*\*/g, "$1")   // **bold**
     .replace(/__(.+?)__/g, "$1")         // __bold__
     .replace(/\*(.+?)\*/g, "$1")         // *italic*
-    .replace(/_(.+?)_/g, "$1")           // _italic_
+    .replace(/(?<=^|\s)_([^_]+)_(?=\s|$)/g, "$1")  // _italic_ (only with surrounding whitespace, preserves underscores in identifiers)
     .replace(/`([^`]+)`/g, "$1")         // `code`
     .trim();
 }
@@ -51,8 +51,8 @@ function normalizeTask(raw: Record<string, unknown>, index: number): ParsedTask 
   const rawId = String(raw.id ?? `task-${String(index + 1).padStart(3, "0")}`);
   return {
     id: stripInlineMarkdown(rawId),
-    title: String(raw.title ?? "Untitled task"),
-    description: String(raw.description ?? ""),
+    title: stripInlineMarkdown(String(raw.title ?? "Untitled task")),
+    description: stripInlineMarkdown(String(raw.description ?? "")),
     filesLikelyTouched: toStringArray(raw.files_likely_touched ?? raw.filesLikelyTouched ?? raw.files ?? []),
     dependsOn: toStringArray(raw.depends_on ?? raw.dependsOn ?? raw.dependencies ?? []),
     acceptanceCriteria: toStringArray(raw.acceptance_criteria ?? raw.acceptanceCriteria ?? raw.criteria ?? []),
@@ -74,8 +74,8 @@ function toStringArray(value: unknown): string[] {
 
 function parseMarkdown(text: string): ParsedTask[] {
   const tasks: ParsedTask[] = [];
-  // Match markdown task sections like: ### task-001: Title or ### Task 1: Title
-  const taskPattern = /###\s*(?:task[-_]?)?(\d+|[a-z]+-\d+)[:\s]+(.+?)(?:\n|$)/gi;
+  // Match markdown task sections like: ### task-001: Title or ### Task 1: Title or ### 1. Title
+  const taskPattern = /###\s*(?:task[-_\s]?)?(\d+|[a-z]+-\d+)[.:\s]+(.+?)(?:\n|$)/gi;
   let match;
 
   while ((match = taskPattern.exec(text)) !== null) {
@@ -90,7 +90,7 @@ function parseMarkdown(text: string): ParsedTask[] {
 
     const description = extractSection(content, "description") || content.trim().split("\n")[0] || "";
     const files = extractListItems(content, "files");
-    const deps = extractListItems(content, "depends|dependencies|deps");
+    const deps = extractListItems(content, "depends_on|depends|dependencies|deps");
     const criteria = extractListItems(content, "acceptance|criteria");
 
     tasks.push({
@@ -154,7 +154,7 @@ function parseTable(text: string): ParsedTask[] {
   };
 
   const headers = parseCells(lines[headerIdx]).map((h) =>
-    h.toLowerCase().replace(/[^a-z_]/g, ""),
+    h.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z_]/g, ""),
   );
 
   // Skip separator row (e.g., |---|---|)
@@ -165,7 +165,7 @@ function parseTable(text: string): ParsedTask[] {
 
   const tasks: ParsedTask[] = [];
   for (let i = dataStart; i < lines.length; i++) {
-    if (!lines[i].includes("|")) break;
+    if (!lines[i].includes("|")) continue;
     const cells = parseCells(lines[i]);
     if (cells.length < 2) continue;
 

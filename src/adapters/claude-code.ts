@@ -1,7 +1,30 @@
 import { spawn, execFileSync } from "child_process";
 import type { AgentAdapter, AgentResult } from "./adapter.js";
 import { trackProcess } from "../lifecycle.js";
-import { detectInputPrompt, extractPromptText } from "./prompt-detection.js";
+
+/**
+ * Format a tool_use block into a short progress line for the AgentPanel.
+ */
+function formatToolProgress(toolName: string, input: Record<string, unknown>): string {
+  switch (toolName) {
+    case "Read":
+      return `  Read ${input.file_path ?? ""}`;
+    case "Write":
+      return `  Write ${input.file_path ?? ""}`;
+    case "Edit":
+      return `  Edit ${input.file_path ?? ""}`;
+    case "Bash": {
+      const cmd = String(input.command ?? "");
+      return `  Bash: ${cmd.length > 60 ? cmd.slice(0, 60) + "…" : cmd}`;
+    }
+    case "Glob":
+      return `  Glob ${input.pattern ?? ""}`;
+    case "Grep":
+      return `  Grep ${input.pattern ?? ""}`;
+    default:
+      return `  ${toolName}`;
+  }
+}
 
 export class ClaudeCodeAdapter implements AgentAdapter {
   name = "claude-code";
@@ -26,77 +49,101 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     const startTime = Date.now();
 
     return new Promise((resolve, reject) => {
-      const proc = spawn("claude", ["-p"], {
+      const proc = spawn("claude", ["-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"], {
         cwd: opts.cwd,
         stdio: ["pipe", "pipe", "pipe"],
       });
       trackProcess(proc);
 
-      let stdout = "";
+      let accumulatedText = "";
+      let resultText: string | null = null;
       let stderr = "";
+      let lineBuffer = "";
+      let settled = false;
 
-      // Buffer for prompt detection (last 500 chars of output)
-      let recentOutput = "";
-      let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-      let waitingForInput = false;
+      // Prevent EPIPE crashes if process dies before stdin write
+      proc.stdin.on("error", () => {});
 
-      function onOutputChunk(text: string) {
-        stdout += text;
-        if (opts.onOutput) {
-          opts.onOutput(text);
+      function processLine(line: string) {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+
+        let parsed: Record<string, unknown>;
+        try {
+          parsed = JSON.parse(trimmed);
+        } catch {
+          // Non-JSON line — treat as raw text (backward compat)
+          accumulatedText += line + "\n";
+          if (opts.onOutput) opts.onOutput(line + "\n");
+          return;
         }
 
-        if (!opts.onInputNeeded) return;
+        const type = parsed.type as string | undefined;
 
-        // Buffer recent output for prompt detection
-        recentOutput += text;
-        if (recentOutput.length > 500) {
-          recentOutput = recentOutput.slice(-500);
-        }
+        if (type === "assistant") {
+          const message = parsed.message as Record<string, unknown> | undefined;
+          if (!message) return;
+          const content = message.content as Array<Record<string, unknown>> | undefined;
+          if (!Array.isArray(content)) return;
 
-        // Reset debounce timer on each output chunk
-        if (debounceTimer) clearTimeout(debounceTimer);
-
-        // After 2s of output stall, check for prompt
-        debounceTimer = setTimeout(() => {
-          if (waitingForInput) return;
-          if (detectInputPrompt(recentOutput)) {
-            waitingForInput = true;
-            const promptText = extractPromptText(recentOutput);
-            opts.onInputNeeded!(promptText).then((response) => {
-              waitingForInput = false;
-              if (response !== null && !proc.killed) {
-                proc.stdin.write(response + "\n");
-              }
-              recentOutput = "";
-            });
+          for (const block of content) {
+            if (block.type === "tool_use") {
+              const toolName = block.name as string;
+              const input = (block.input ?? {}) as Record<string, unknown>;
+              const progressLine = formatToolProgress(toolName, input);
+              if (opts.onOutput) opts.onOutput(progressLine + "\n");
+            } else if (block.type === "text") {
+              // Accumulate text silently — don't send to panel
+              accumulatedText += (block.text as string) ?? "";
+            }
           }
-        }, 2000);
+        } else if (type === "result") {
+          // Final result — use parsed.result as the response text
+          resultText = (parsed.result as string) ?? "";
+        }
+        // Ignore system, user, and other event types
       }
 
       proc.stdout.on("data", (chunk: Buffer) => {
-        onOutputChunk(chunk.toString());
+        const data = chunk.toString();
+        lineBuffer += data;
+
+        // Split into complete lines
+        const lines = lineBuffer.split("\n");
+        // Last element is incomplete — keep in buffer
+        lineBuffer = lines.pop()!;
+
+        for (const line of lines) {
+          processLine(line);
+        }
       });
 
       proc.stderr.on("data", (chunk: Buffer) => {
         const text = chunk.toString();
         stderr += text;
-        // Stream stderr too so the user sees errors/progress
-        if (opts.onOutput) {
-          opts.onOutput(text);
-        }
       });
 
       const timer = timeout > 0 ? setTimeout(() => {
+        settled = true;
         proc.kill("SIGTERM");
         reject(new Error(`Claude Code timed out after ${timeout}ms`));
       }, timeout) : null;
 
       proc.on("close", (code) => {
         if (timer) clearTimeout(timer);
-        if (debounceTimer) clearTimeout(debounceTimer);
+        if (settled) return;
+        settled = true;
+
+        // Flush remaining line buffer
+        if (lineBuffer.trim()) {
+          processLine(lineBuffer);
+          lineBuffer = "";
+        }
+
+        const finalOutput = resultText ?? (accumulatedText || stderr);
+
         resolve({
-          output: stdout || stderr,
+          output: finalOutput,
           exitCode: code ?? 1,
           durationMs: Date.now() - startTime,
         });
@@ -104,24 +151,16 @@ export class ClaudeCodeAdapter implements AgentAdapter {
 
       proc.on("error", (err) => {
         if (timer) clearTimeout(timer);
-        if (debounceTimer) clearTimeout(debounceTimer);
+        if (settled) return;
+        settled = true;
         reject(err);
       });
 
+      // Write prompt and immediately close stdin so `claude -p` sees EOF
+      // and starts processing. Pipe mode reads stdin to completion before
+      // executing — keeping stdin open causes the process to hang.
       proc.stdin.write(opts.prompt);
-
-      // If onInputNeeded is provided, keep stdin open so we can pipe responses.
-      // Otherwise, close stdin immediately (backward compat).
-      if (!opts.onInputNeeded) {
-        proc.stdin.end();
-      } else {
-        // Close stdin when the process exits
-        proc.on("close", () => {
-          if (!proc.stdin.destroyed) {
-            proc.stdin.end();
-          }
-        });
-      }
+      proc.stdin.end();
     });
   }
 }

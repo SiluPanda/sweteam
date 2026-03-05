@@ -8,6 +8,8 @@ vi.mock("../git/git.js", () => ({
   resolveRepo: vi.fn((input: string) => `owner/${input}`),
   cloneOrLocateRepo: vi.fn(() => "/tmp/fake-repo"),
   createBranch: vi.fn(),
+  getDefaultBranch: vi.fn().mockReturnValue("main"),
+  git: vi.fn(),
   isGitRepo: vi.fn(() => true),
   getRepoRoot: vi.fn(() => "/tmp/fake-repo"),
   repoFromRemote: vi.fn(() => "owner/fake-repo"),

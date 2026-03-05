@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "../db/client.js";
 import { tasks } from "../db/schema.js";
-import { git, createBranch, getDiff, commitAll } from "../git/git.js";
+import { git, createBranch, getDiff, getStagedDiff, commitAll } from "../git/git.js";
 import { resolveAdapter } from "../adapters/adapter.js";
 import { loadConfig } from "../config/loader.js";
 import { displayTaskId } from "./orchestrator.js";
@@ -126,8 +126,8 @@ export async function runTask(
       onInputNeeded,
     });
 
-    // Commit any uncommitted changes the coder left behind
-    const uncommitted = getDiff(repoPath);
+    // Commit any uncommitted changes the coder left behind (staged or unstaged)
+    const uncommitted = getDiff(repoPath) || getStagedDiff(repoPath);
     if (uncommitted.length > 0) {
       commitAll(`feat(${displayTaskId(task.id)}): ${task.title}`, repoPath);
     }

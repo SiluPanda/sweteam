@@ -11,6 +11,9 @@ vi.mock("../git/git.js", () => ({
   resolveRepo: vi.fn((input: string) => `owner/${input}`),
   cloneOrLocateRepo: vi.fn(() => "/tmp/fake-repo"),
   createBranch: vi.fn(),
+  getDefaultBranch: vi.fn().mockReturnValue("main"),
+  git: vi.fn(),
+  deleteBranches: vi.fn(),
 }));
 
 // Mock the config loader

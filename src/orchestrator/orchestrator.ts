@@ -4,7 +4,7 @@ import { tasks as tasksTable, sessions } from "../db/schema.js";
 import { loadConfig } from "../config/loader.js";
 import { runTask, type TaskRecord } from "./task-runner.js";
 import { reviewAndMerge } from "./reviewer.js";
-import { addMessage } from "../session/manager.js";
+import { addMessage, getSession } from "../session/manager.js";
 import type { ParsedTask } from "../planner/plan-parser.js";
 
 export interface OrchestratorCallbacks {
@@ -37,6 +37,7 @@ export function displayTaskId(dbId: string): string {
 export function insertTasksFromPlan(
   sessionId: string,
   parsedTasks: ParsedTask[],
+  orderOffset: number = 0,
 ): void {
   const db = getDb();
   const now = new Date();
@@ -71,7 +72,7 @@ export function insertTasksFromPlan(
           t.acceptanceCriteria.length > 0
             ? JSON.stringify(t.acceptanceCriteria)
             : null,
-        order: i + 1,
+        order: orderOffset + i + 1,
         createdAt: now,
         updatedAt: now,
       })
@@ -158,6 +159,13 @@ export async function runOrchestrator(
 
   // Sequential execution in dependency order
   for (const task of allTasks) {
+    // Check if session was stopped
+    const session = getSession(sessionId);
+    if (session?.status === "stopped") {
+      addMessage(sessionId, "system", "Build cancelled — session stopped.");
+      break;
+    }
+
     // Skip non-queued tasks
     if (task.status !== "queued") {
       if (task.status === "done") {

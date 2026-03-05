@@ -6,6 +6,7 @@ import { getDb, SWETEAM_DIR } from "../db/client.js";
 import { sessions, messages, tasks as tasksTable } from "../db/schema.js";
 import { resolveRepo, cloneOrLocateRepo, createBranch, deleteBranches, getDefaultBranch, git } from "../git/git.js";
 import { loadConfig } from "../config/loader.js";
+import { killAllProcesses } from "../lifecycle.js";
 
 function generateSessionId(): string {
   return `s_${nanoid(8)}`;
@@ -51,7 +52,10 @@ export async function createSession(
     ? `${config.execution.branch_prefix}${sessionId}-${slug}`
     : `${config.execution.branch_prefix}${sessionId}`;
 
-  createBranch(workingBranch, "HEAD", repoLocalPath);
+  // Branch from the default branch (not HEAD, which may be a stale feature branch)
+  const baseBranch = getDefaultBranch(repoLocalPath);
+  try { git(["checkout", baseBranch], repoLocalPath); } catch { /* may already be on it */ }
+  createBranch(workingBranch, baseBranch, repoLocalPath);
 
   const db = getDb();
   const now = new Date();
@@ -192,6 +196,9 @@ export function stopSession(id: string): void {
     .set({ status: "stopped", stoppedAt: now, updatedAt: now })
     .where(eq(sessions.id, id))
     .run();
+
+  // Kill any spawned child processes (coder/reviewer agents)
+  killAllProcesses();
 }
 
 export function deleteSession(id: string): void {
@@ -201,7 +208,14 @@ export function deleteSession(id: string): void {
     throw new Error(`Session not found: ${id}`);
   }
 
+  // Stop any active build processes before deleting
+  if (session.status === "building" || session.status === "iterating") {
+    killAllProcesses();
+  }
+
   // Clean up git branches associated with this session
+  const config = loadConfig();
+  const prefix = config.execution.branch_prefix ?? "sw/";
   if (session.repoLocalPath) {
     try {
       // Switch to default branch first so session branch isn't checked out
@@ -211,7 +225,8 @@ export function deleteSession(id: string): void {
       // May already be on default branch or repo may be gone
     }
     try {
-      deleteBranches(`sw/${id}*`, session.repoLocalPath);
+      deleteBranches(`${prefix}${id}*`, session.repoLocalPath);
+      deleteBranches(`${prefix}${id}-*`, session.repoLocalPath);
     } catch {
       // Git cleanup is best-effort — don't fail the delete
     }

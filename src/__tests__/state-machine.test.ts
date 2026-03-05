@@ -39,8 +39,12 @@ describe("session/state-machine — validateTransition", () => {
     expect(validateTransition("stopped", "building")).toBe(true);
   });
 
-  it("should allow stopped -> iterating", () => {
-    expect(validateTransition("stopped", "iterating")).toBe(true);
+  it("should reject stopped -> iterating (removed)", () => {
+    expect(validateTransition("stopped", "iterating")).toBe(false);
+  });
+
+  it("should allow stopped -> planning", () => {
+    expect(validateTransition("stopped", "planning")).toBe(true);
   });
 
   it("should reject planning -> awaiting_feedback", () => {
@@ -51,8 +55,12 @@ describe("session/state-machine — validateTransition", () => {
     expect(validateTransition("building", "planning")).toBe(true);
   });
 
-  it("should allow building -> building (retry)", () => {
-    expect(validateTransition("building", "building")).toBe(true);
+  it("should reject building -> building (no longer allowed)", () => {
+    expect(validateTransition("building", "building")).toBe(false);
+  });
+
+  it("should allow iterating -> planning", () => {
+    expect(validateTransition("iterating", "planning")).toBe(true);
   });
 
   it("should allow awaiting_feedback -> building (rebuild)", () => {

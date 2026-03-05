@@ -57,8 +57,17 @@ export function createSessionHandlers(
 ): SessionHandlers {
   // Hydrate lastPlannerResponse from DB so @build works after re-entry
   const existingSession = getSession(sessionId);
-  let lastPlannerResponse = existingSession?.planJson ?? "";
+  let lastPlannerResponse = "";
+  if (existingSession?.planJson) {
+    try {
+      const parsed = JSON.parse(existingSession.planJson);
+      lastPlannerResponse = parsed.raw ?? existingSession.planJson;
+    } catch {
+      lastPlannerResponse = existingSession.planJson;
+    }
+  }
   let currentGoal = goal;
+  let buildInProgress = false;
 
   return {
     onMessage: async (text: string): Promise<void> => {
@@ -74,16 +83,22 @@ export function createSessionHandlers(
 
       // Route based on session status
       const session = getSession(sessionId);
-      if (session?.status === "building") {
-        // Build was interrupted — treat message as feedback on the interrupted build
-        transition(sessionId, "awaiting_feedback");
-        await handleFeedback(sessionId, text);
+      if (session?.status === "building" || session?.status === "iterating") {
+        // Build or iteration is in progress — queue message as feedback for when it completes
+        console.log("A build is currently in progress. Your message will be treated as feedback when it completes.");
+        console.log("Use @stop to cancel the current build first, or wait for it to finish.\n");
+        addMessage(sessionId, "user", text, { phase: "feedback-pending" });
         return;
       }
       if (session?.status === "awaiting_feedback") {
         // Already awaiting feedback — route directly to feedback handler
         await handleFeedback(sessionId, text);
         return;
+      }
+
+      // Resume stopped session into planning
+      if (session?.status === "stopped") {
+        transition(sessionId, "planning");
       }
 
       // Default: planning — invoke planner
@@ -109,12 +124,21 @@ export function createSessionHandlers(
         writeEvent(sessionId, { type: "agent-end", id: plannerId, success: true });
         panel.destroy();
 
-        if (!response.trim()) {
+        if (response.trim()) {
+          console.log("\n" + response + "\n");
+        } else {
           console.log("\n(planner returned empty response)\n");
         }
 
         lastPlannerResponse = response;
         addMessage(sessionId, "agent", response, { phase: "planning" });
+
+        // Persist draft plan so it survives session re-entry
+        const db = getDb();
+        db.update(sessions)
+          .set({ planJson: response, updatedAt: new Date() })
+          .where(eq(sessions.id, sessionId))
+          .run();
       } catch (err) {
         panel.completeAgent(plannerId, false);
         writeEvent(sessionId, { type: "agent-end", id: plannerId, success: false });
@@ -128,6 +152,19 @@ export function createSessionHandlers(
     },
 
     onBuild: async (): Promise<void> => {
+      // Guard against concurrent builds
+      if (buildInProgress) {
+        console.log("A build is already in progress. Use @stop to cancel it first.");
+        return;
+      }
+
+      // Check session state
+      const currentSession = getSession(sessionId);
+      if (currentSession?.status === "building" || currentSession?.status === "iterating") {
+        console.log("A build is already in progress. Use @stop to cancel it first.");
+        return;
+      }
+
       if (!lastPlannerResponse) {
         // Try loading plan from DB as a fallback (e.g. after session re-entry)
         const s = getSession(sessionId);
@@ -147,17 +184,25 @@ export function createSessionHandlers(
       // The user sees output via the agent log watcher and can
       // detach (Escape/Enter) and reattach (/enter) freely.
       const planSnapshot = lastPlannerResponse;
-      handleBuild(sessionId, planSnapshot).catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`\nBuild failed: ${friendlyError(msg)}\n`);
-        addMessage(sessionId, "system", `Build failed: ${msg}`);
-      });
+      buildInProgress = true;
+      handleBuild(sessionId, planSnapshot)
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`\nBuild failed: ${friendlyError(msg)}\n`);
+          addMessage(sessionId, "system", `Build failed: ${msg}`);
+          // Recover to planning state so user can retry
+          try { transition(sessionId, "planning"); } catch { /* already transitioned */ }
+        })
+        .finally(() => {
+          buildInProgress = false;
+        });
 
       // Give the build a moment to start writing events, then attach
       await new Promise((r) => setTimeout(r, 300));
     },
 
     onStop: async (): Promise<void> => {
+      buildInProgress = false;
       stopSession(sessionId);
       console.log(`\nSession ${sessionId} stopped.\n`);
     },
@@ -228,6 +273,8 @@ export async function handleSessionCommand(
     await handlers.onPr();
   } else if (trimmed === "@tasks") {
     await handlers.onTasks();
+  } else if (trimmed === "@feedback") {
+    console.log("Usage: @feedback <your feedback text>");
   } else if (trimmed.startsWith("@feedback ")) {
     await handlers.onFeedback(trimmed.slice("@feedback ".length));
   } else {

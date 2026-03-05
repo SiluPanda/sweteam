@@ -71,6 +71,7 @@ function createConnection(dbPath: string = DB_PATH): Database.Database {
   const sqlite = new Database(dbPath);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
+  sqlite.pragma("busy_timeout = 5000");
   runMigrations(sqlite);
   return sqlite;
 }

@@ -30,6 +30,7 @@ program.hook("preAction", () => {
     coder: opts.coder,
     reviewer: opts.reviewer,
     parallel: opts.parallel,
+    configPath: opts.config,
   });
 });
 
@@ -150,15 +151,16 @@ function applyOverrides(): void {
 
 // Detect if no subcommand was provided → launch interactive REPL
 const args = process.argv.slice(2);
-const hasSubcommand = args.some((a) => !a.startsWith("-"));
+const knownCommands = new Set(program.commands.map((c) => c.name()));
+const hasSubcommand = args.some((a) => !a.startsWith("-") && knownCommands.has(a));
 const hasVersionOrHelp = args.includes("--version") || args.includes("-V") || args.includes("--help") || args.includes("-h");
 
 if (hasVersionOrHelp || hasSubcommand) {
   // Let Commander handle subcommands, --version, and --help
   program.parse();
-} else if (args.length === 0 || !hasSubcommand) {
+} else {
   // No subcommand — launch interactive REPL
-  program.parseOptions(process.argv);
+  program.parseOptions(args);
   applyOverrides();
   import("./repl/repl.js").then(({ runRepl }) => runRepl());
 }

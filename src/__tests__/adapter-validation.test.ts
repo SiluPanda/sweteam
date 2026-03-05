@@ -10,10 +10,15 @@ vi.mock("child_process", () => {
 
   function createMockProc(exitCode: number, stdout: string, stderr: string = "") {
     const proc = new EventEmitter();
-    proc.stdin = { write: vi.fn(), end: vi.fn() };
+    const stdin = new EventEmitter();
+    stdin.write = vi.fn();
+    stdin.end = vi.fn();
+    stdin.destroyed = false;
+    proc.stdin = stdin;
     proc.stdout = new EventEmitter();
     proc.stderr = new EventEmitter();
     proc.kill = vi.fn();
+    proc.killed = false;
 
     setTimeout(() => {
       if (stdout) proc.stdout.emit("data", Buffer.from(stdout));

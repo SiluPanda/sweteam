@@ -37,6 +37,10 @@ export class OpenCodeAdapter implements AgentAdapter {
       let recentOutput = "";
       let debounceTimer: ReturnType<typeof setTimeout> | null = null;
       let waitingForInput = false;
+      let settled = false;
+
+      // Prevent EPIPE crashes
+      proc.stdin.on("error", () => {});
 
       proc.stdout.on("data", (chunk: Buffer) => {
         const text = chunk.toString();
@@ -54,7 +58,7 @@ export class OpenCodeAdapter implements AgentAdapter {
 
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
-          if (waitingForInput) return;
+          if (waitingForInput || settled) return;
           if (detectInputPrompt(recentOutput)) {
             waitingForInput = true;
             const promptText = extractPromptText(recentOutput);
@@ -63,6 +67,9 @@ export class OpenCodeAdapter implements AgentAdapter {
               if (response !== null && !proc.killed) {
                 proc.stdin.write(response + "\n");
               }
+              recentOutput = "";
+            }).catch(() => {
+              waitingForInput = false;
               recentOutput = "";
             });
           }
@@ -74,6 +81,7 @@ export class OpenCodeAdapter implements AgentAdapter {
       });
 
       const timer = timeout > 0 ? setTimeout(() => {
+        settled = true;
         proc.kill("SIGTERM");
         reject(new Error(`OpenCode timed out after ${timeout}ms`));
       }, timeout) : null;
@@ -81,6 +89,8 @@ export class OpenCodeAdapter implements AgentAdapter {
       proc.on("close", (code) => {
         if (timer) clearTimeout(timer);
         if (debounceTimer) clearTimeout(debounceTimer);
+        if (settled) return;
+        settled = true;
         resolve({
           output: stdout || stderr,
           exitCode: code ?? 1,
@@ -91,6 +101,8 @@ export class OpenCodeAdapter implements AgentAdapter {
       proc.on("error", (err) => {
         if (timer) clearTimeout(timer);
         if (debounceTimer) clearTimeout(debounceTimer);
+        if (settled) return;
+        settled = true;
         reject(err);
       });
     });

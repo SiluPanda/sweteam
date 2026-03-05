@@ -153,7 +153,18 @@ export async function reviewAndMerge(
       .run();
 
     if (reviewResult.verdict === "approve") {
-      mergeTask(task, sessionBranch, repoPath);
+      try {
+        mergeTask(task, sessionBranch, repoPath);
+      } catch (mergeErr) {
+        const mergeMsg = mergeErr instanceof Error ? mergeErr.message : String(mergeErr);
+        // Attempt to abort a failed merge to restore clean state
+        try { git(["merge", "--abort"], repoPath); } catch { /* no merge in progress */ }
+        db.update(tasks)
+          .set({ status: "failed", agentOutput: `Merge failed: ${mergeMsg}`, updatedAt: new Date() })
+          .where(eq(tasks.id, task.id))
+          .run();
+        return { merged: false, reviewResult: { verdict: "request_changes", issues: [{ message: `Merge failed: ${mergeMsg}` }], summary: mergeMsg } };
+      }
       return { merged: true, reviewResult };
     }
 
@@ -163,6 +174,11 @@ export async function reviewAndMerge(
         .set({ status: "fixing", updatedAt: new Date() })
         .where(eq(tasks.id, task.id))
         .run();
+
+      // Ensure we're on the task branch before invoking the coder for fixes
+      if (task.branchName) {
+        try { git(["checkout", task.branchName], repoPath); } catch { /* may already be on it */ }
+      }
 
       const coderAdapter = resolveAdapter(config.roles.coder, config);
       const fixPrompt = `The reviewer found issues with your implementation. Fix them:

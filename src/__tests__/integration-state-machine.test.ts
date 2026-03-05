@@ -65,26 +65,43 @@ describe("integration — state machine transitions", () => {
 
   it("should reject invalid transitions", () => {
     expect(validateTransition("awaiting_feedback", "planning")).toBe(false);
-    expect(validateTransition("iterating", "planning")).toBe(false);
+    expect(validateTransition("planning", "awaiting_feedback")).toBe(false);
+    expect(validateTransition("building", "building")).toBe(false);
+    expect(validateTransition("stopped", "iterating")).toBe(false);
   });
 
   it("should validate all expected valid transitions", () => {
     expect(validateTransition("planning", "building")).toBe(true);
     expect(validateTransition("planning", "stopped")).toBe(true);
     expect(validateTransition("building", "awaiting_feedback")).toBe(true);
+    expect(validateTransition("building", "planning")).toBe(true);
     expect(validateTransition("building", "stopped")).toBe(true);
+    expect(validateTransition("awaiting_feedback", "building")).toBe(true);
     expect(validateTransition("awaiting_feedback", "iterating")).toBe(true);
     expect(validateTransition("awaiting_feedback", "stopped")).toBe(true);
     expect(validateTransition("iterating", "awaiting_feedback")).toBe(true);
+    expect(validateTransition("iterating", "planning")).toBe(true);
     expect(validateTransition("iterating", "stopped")).toBe(true);
+    expect(validateTransition("stopped", "planning")).toBe(true);
+    expect(validateTransition("stopped", "building")).toBe(true);
   });
 
   it("should throw on transition for non-existent session", () => {
     expect(() => transition("nonexistent", "building")).toThrow();
   });
 
-  it("should allow building → building self-transition", () => {
+  it("should reject building → building self-transition", () => {
     const id = createTestSession("building");
-    expect(() => transition(id, "building")).not.toThrow();
+    expect(() => transition(id, "building")).toThrow("Invalid transition");
+  });
+
+  it("should allow iterating → planning transition", () => {
+    const id = createTestSession("iterating");
+    expect(() => transition(id, "planning")).not.toThrow();
+  });
+
+  it("should allow stopped → planning transition", () => {
+    const id = createTestSession("stopped");
+    expect(() => transition(id, "planning")).not.toThrow();
   });
 });

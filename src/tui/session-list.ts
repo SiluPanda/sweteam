@@ -13,6 +13,16 @@ interface SessionRowProps {
   session: SessionEntry;
 }
 
+function sessionStatusColor(status: string): string {
+  switch (status) {
+    case "awaiting_feedback": return "green";
+    case "building": case "iterating": return "blue";
+    case "planning": return "cyan";
+    case "stopped": return "yellow";
+    default: return "white";
+  }
+}
+
 export function SessionRow({ session }: SessionRowProps): React.ReactElement {
   const goalTrunc =
     session.goal.length > 30
@@ -26,7 +36,7 @@ export function SessionRow({ session }: SessionRowProps): React.ReactElement {
     React.createElement(Text, { color: "cyan" }, session.id.padEnd(14)),
     React.createElement(Text, null, session.repo.padEnd(22)),
     React.createElement(Text, { dimColor: true }, goalTrunc.padEnd(32)),
-    React.createElement(Text, { color: "green" }, session.status + prInfo),
+    React.createElement(Text, { color: sessionStatusColor(session.status) }, session.status + prInfo),
   );
 }
 
@@ -62,8 +72,8 @@ export function SessionListView({
       React.createElement(Text, { bold: true }, "Goal".padEnd(32)),
       React.createElement(Text, { bold: true }, "Status"),
     ),
-    ...sessions.map((s, i) =>
-      React.createElement(SessionRow, { key: i, session: s }),
+    ...sessions.map((s) =>
+      React.createElement(SessionRow, { key: s.id, session: s }),
     ),
   );
 }
