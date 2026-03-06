@@ -7,10 +7,19 @@ export async function handleDelete(sessionId: string): Promise<void> {
       console.log("No sessions to delete.");
       return;
     }
+    const errors: string[] = [];
     for (const s of all) {
-      deleteSession(s.id);
+      try {
+        deleteSession(s.id);
+      } catch (err) {
+        errors.push(`${s.id}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
-    console.log(`Deleted all ${all.length} sessions.`);
+    const deleted = all.length - errors.length;
+    console.log(`Deleted ${deleted} of ${all.length} sessions.`);
+    if (errors.length > 0) {
+      console.error(`Failed to delete:\n${errors.map(e => `  ${e}`).join("\n")}`);
+    }
     return;
   }
 

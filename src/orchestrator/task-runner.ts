@@ -87,9 +87,11 @@ export async function runTask(
   repoPath: string,
   onOutput?: (chunk: string) => void,
   onInputNeeded?: (promptText: string) => Promise<string | null>,
+  options?: { worktreePath?: string },
 ): Promise<{ success: boolean; output: string; diff: string }> {
   const config = loadConfig();
   const db = getDb();
+  const cwd = options?.worktreePath ?? repoPath;
 
   // Create task branch — use dash separator to avoid git ref conflicts.
   // Session branch is "sw/s_ID" so task branch must NOT nest under it
@@ -98,7 +100,9 @@ export async function runTask(
   const safeBranchId = task.id.replace(/:/g, "-").replace(/[^a-zA-Z0-9/_-]/g, "");
   const branchName = `sw/${safeBranchId}-${task.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30)}`;
 
-  createBranch(branchName, sessionBranch, repoPath);
+  if (!options?.worktreePath) {
+    createBranch(branchName, sessionBranch, repoPath);
+  }
 
   // Update task in DB
   db.update(tasks)
@@ -120,20 +124,22 @@ export async function runTask(
   try {
     const result = await adapter.execute({
       prompt,
-      cwd: repoPath,
+      cwd,
       timeout: 0,
       onOutput,
       onInputNeeded,
     });
 
-    // Commit any uncommitted changes the coder left behind (staged or unstaged)
-    const uncommitted = getDiff(repoPath) || getStagedDiff(repoPath);
-    if (uncommitted.length > 0) {
-      commitAll(`feat(${displayTaskId(task.id)}): ${task.title}`, repoPath);
+    // Commit any uncommitted changes the coder left behind (staged, unstaged, or untracked)
+    const hasUnstaged = getDiff(cwd).length > 0;
+    const hasStaged = getStagedDiff(cwd).length > 0;
+    const hasUntracked = git(["ls-files", "--others", "--exclude-standard"], cwd).length > 0;
+    if (hasUnstaged || hasStaged || hasUntracked) {
+      commitAll(`feat(${displayTaskId(task.id)}): ${task.title}`, cwd);
     }
 
     // Capture the full diff of this task branch vs the session branch
-    const diff = git(["diff", `${sessionBranch}...HEAD`], repoPath);
+    const diff = git(["diff", `${sessionBranch}...HEAD`], cwd);
 
     // Update DB with results
     db.update(tasks)

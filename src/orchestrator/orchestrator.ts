@@ -193,8 +193,9 @@ export async function runOrchestrator(
           "system",
           `Task ${displayTaskId(task.id)} blocked: dependency failed`,
         );
-        continue;
       }
+      // Dependencies not yet met — skip this task for now
+      continue;
     }
 
     // Run the task — Coder phase

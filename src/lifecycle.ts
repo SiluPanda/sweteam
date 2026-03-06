@@ -2,16 +2,32 @@ import type { ChildProcess } from "child_process";
 import { closeDb } from "./db/client.js";
 
 /** Track spawned child processes for cleanup on shutdown. */
-const activeProcesses = new Set<ChildProcess>();
+const activeProcesses = new Map<ChildProcess, string | undefined>();
 
-export function trackProcess(proc: ChildProcess): void {
-  activeProcesses.add(proc);
+export function trackProcess(proc: ChildProcess, sessionId?: string): void {
+  activeProcesses.set(proc, sessionId);
   proc.on("close", () => activeProcesses.delete(proc));
   proc.on("error", () => activeProcesses.delete(proc));
 }
 
+/** Kill processes belonging to a specific session, or all if no sessionId given. */
+export function killSessionProcesses(sessionId: string): void {
+  for (const [proc, sid] of activeProcesses) {
+    if (sid === sessionId) {
+      try { proc.kill("SIGTERM"); } catch { /* already exited */ }
+    }
+  }
+  setTimeout(() => {
+    for (const [proc, sid] of activeProcesses) {
+      if (sid === sessionId) {
+        try { proc.kill("SIGKILL"); } catch { /* already dead */ }
+      }
+    }
+  }, 2000);
+}
+
 export function killAllProcesses(): void {
-  for (const proc of activeProcesses) {
+  for (const proc of activeProcesses.keys()) {
     try {
       proc.kill("SIGTERM");
     } catch {
@@ -20,7 +36,7 @@ export function killAllProcesses(): void {
   }
   // Give processes a moment, then force-kill any remaining
   setTimeout(() => {
-    for (const proc of activeProcesses) {
+    for (const proc of activeProcesses.keys()) {
       try {
         proc.kill("SIGKILL");
       } catch {

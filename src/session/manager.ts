@@ -6,7 +6,7 @@ import { getDb, SWETEAM_DIR } from "../db/client.js";
 import { sessions, messages, tasks as tasksTable } from "../db/schema.js";
 import { resolveRepo, cloneOrLocateRepo, createBranch, deleteBranches, getDefaultBranch, git } from "../git/git.js";
 import { loadConfig } from "../config/loader.js";
-import { killAllProcesses } from "../lifecycle.js";
+import { killAllProcesses, killSessionProcesses } from "../lifecycle.js";
 
 function generateSessionId(): string {
   return `s_${nanoid(8)}`;
@@ -197,8 +197,8 @@ export function stopSession(id: string): void {
     .where(eq(sessions.id, id))
     .run();
 
-  // Kill any spawned child processes (coder/reviewer agents)
-  killAllProcesses();
+  // Kill child processes belonging to this session
+  killSessionProcesses(id);
 }
 
 export function deleteSession(id: string): void {
@@ -210,7 +210,7 @@ export function deleteSession(id: string): void {
 
   // Stop any active build processes before deleting
   if (session.status === "building" || session.status === "iterating") {
-    killAllProcesses();
+    killSessionProcesses(id);
   }
 
   // Clean up git branches associated with this session

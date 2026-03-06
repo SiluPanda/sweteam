@@ -6,8 +6,7 @@ import { invokePlanner } from "../planner/planner.js";
 import { handleBuild } from "../orchestrator/build-handler.js";
 import { handleFeedback } from "../orchestrator/feedback-handler.js";
 import { transition } from "./state-machine.js";
-import { AgentPanel } from "../ui/agent-panel.js";
-import { writeEvent } from "./agent-log.js";
+import { clearLog, writeEvent } from "./agent-log.js";
 import { friendlyError } from "../orchestrator/error-handling.js";
 import {
   getStatusDisplay,
@@ -68,6 +67,7 @@ export function createSessionHandlers(
   }
   let currentGoal = goal;
   let buildInProgress = false;
+  let planningInProgress = false;
 
   return {
     onMessage: async (text: string): Promise<void> => {
@@ -91,8 +91,18 @@ export function createSessionHandlers(
         return;
       }
       if (session?.status === "awaiting_feedback") {
-        // Already awaiting feedback — route directly to feedback handler
-        await handleFeedback(sessionId, text);
+        // Already awaiting feedback — route directly to feedback handler in background
+        handleFeedback(sessionId, text)
+          .catch((err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            addMessage(sessionId, "system", `Feedback failed: ${msg}`);
+          });
+        await new Promise((r) => setTimeout(r, 300));
+        return;
+      }
+
+      if (planningInProgress) {
+        console.log("Planner is already running. Press Escape to background, then re-enter later.\n");
         return;
       }
 
@@ -101,54 +111,53 @@ export function createSessionHandlers(
         transition(sessionId, "planning");
       }
 
-      // Default: planning — invoke planner
+      // Default: planning — invoke planner in background
       addMessage(sessionId, "user", text, { phase: "planning" });
 
-      const panel = new AgentPanel();
       const plannerId = "planner";
-      panel.addAgent(plannerId, "Planner", sessionId, currentGoal);
+      clearLog(sessionId);
       writeEvent(sessionId, { type: "agent-start", id: plannerId, role: "Planner", taskId: sessionId, title: currentGoal });
 
-      try {
-        const response = await invokePlanner(
-          sessionId,
-          repo,
-          currentGoal,
-          repoPath,
-          (chunk) => {
-            panel.appendOutput(plannerId, chunk);
-            writeEvent(sessionId, { type: "output", id: plannerId, chunk });
-          },
-        );
-        panel.completeAgent(plannerId, true);
-        writeEvent(sessionId, { type: "agent-end", id: plannerId, success: true });
-        panel.destroy();
+      planningInProgress = true;
+      invokePlanner(
+        sessionId,
+        repo,
+        currentGoal,
+        repoPath,
+        (chunk) => {
+          writeEvent(sessionId, { type: "output", id: plannerId, chunk });
+        },
+      )
+        .then((response) => {
+          writeEvent(sessionId, { type: "agent-end", id: plannerId, success: true });
 
-        if (response.trim()) {
-          console.log("\n" + response + "\n");
-        } else {
-          console.log("\n(planner returned empty response)\n");
-        }
+          lastPlannerResponse = response;
+          addMessage(sessionId, "agent", response, { phase: "planning" });
 
-        lastPlannerResponse = response;
-        addMessage(sessionId, "agent", response, { phase: "planning" });
+          // Persist draft plan so it survives session re-entry
+          const db = getDb();
+          db.update(sessions)
+            .set({ planJson: response, updatedAt: new Date() })
+            .where(eq(sessions.id, sessionId))
+            .run();
 
-        // Persist draft plan so it survives session re-entry
-        const db = getDb();
-        db.update(sessions)
-          .set({ planJson: response, updatedAt: new Date() })
-          .where(eq(sessions.id, sessionId))
-          .run();
-      } catch (err) {
-        panel.completeAgent(plannerId, false);
-        writeEvent(sessionId, { type: "agent-end", id: plannerId, success: false });
-        panel.destroy();
+          writeEvent(sessionId, { type: "phase-complete", id: plannerId });
+        })
+        .catch((err) => {
+          writeEvent(sessionId, { type: "agent-end", id: plannerId, success: false });
 
-        const msg = err instanceof Error ? err.message : String(err);
-        const errResponse = `Error invoking planner: ${friendlyError(msg)}`;
-        console.error("\n" + errResponse + "\n");
-        addMessage(sessionId, "agent", errResponse, { phase: "planning" });
-      }
+          const msg = err instanceof Error ? err.message : String(err);
+          const errResponse = `Error invoking planner: ${friendlyError(msg)}`;
+          addMessage(sessionId, "agent", errResponse, { phase: "planning" });
+
+          writeEvent(sessionId, { type: "phase-complete", id: plannerId });
+        })
+        .finally(() => {
+          planningInProgress = false;
+        });
+
+      // Give the planner a moment to start writing events
+      await new Promise((r) => setTimeout(r, 300));
     },
 
     onBuild: async (): Promise<void> => {
@@ -209,14 +218,14 @@ export function createSessionHandlers(
 
     onFeedback: async (text: string): Promise<void> => {
       console.log("\nProcessing feedback...\n");
-      try {
-        await handleFeedback(sessionId, text);
-        console.log("Feedback iteration complete. PR updated.\n");
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`Feedback processing failed: ${msg}`);
-        addMessage(sessionId, "system", `Feedback failed: ${msg}`);
-      }
+      handleFeedback(sessionId, text)
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`Feedback processing failed: ${msg}`);
+          addMessage(sessionId, "system", `Feedback failed: ${msg}`);
+        });
+      // Give the feedback handler time to start writing events
+      await new Promise((r) => setTimeout(r, 300));
     },
 
     onPlan: async (): Promise<void> => {

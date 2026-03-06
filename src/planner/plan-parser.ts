@@ -12,28 +12,60 @@ export interface ParsedPlan {
   raw: string;
 }
 
-function tryParseJson(text: string): ParsedTask[] | null {
-  // Try to extract JSON from the response (may be wrapped in markdown code blocks)
-  const jsonMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  const jsonStr = jsonMatch ? jsonMatch[1] : text;
-
+/** Try to parse a JSON string into tasks. Returns null on failure. */
+function tryParse(jsonStr: string): ParsedTask[] | null {
   try {
     const parsed = JSON.parse(jsonStr.trim());
-
-    // Handle array of tasks directly
-    if (Array.isArray(parsed)) {
+    if (Array.isArray(parsed) && parsed.length > 0) {
       return parsed.map(normalizeTask);
     }
-
-    // Handle { tasks: [...] } wrapper
-    if (parsed.tasks && Array.isArray(parsed.tasks)) {
+    if (parsed.tasks && Array.isArray(parsed.tasks) && parsed.tasks.length > 0) {
       return parsed.tasks.map(normalizeTask);
     }
-
     return null;
   } catch {
     return null;
   }
+}
+
+function tryParseJson(text: string): ParsedTask[] | null {
+  // Strategy 1: Extract from ```json code blocks specifically
+  const jsonBlockMatch = text.match(/```json\s*\n([\s\S]*?)\n\s*```/);
+  if (jsonBlockMatch) {
+    const result = tryParse(jsonBlockMatch[1]);
+    if (result) return result;
+  }
+
+  // Strategy 2: Try any fenced code block
+  const anyBlockMatch = text.match(/```\w*\s*\n([\s\S]*?)\n\s*```/);
+  if (anyBlockMatch) {
+    const result = tryParse(anyBlockMatch[1]);
+    if (result) return result;
+  }
+
+  // Strategy 3: Find a JSON array by matching outermost [ ... ]
+  // This handles cases where the result text has no code block wrapping
+  const arrayStart = text.indexOf("[");
+  if (arrayStart !== -1) {
+    const arrayEnd = text.lastIndexOf("]");
+    if (arrayEnd > arrayStart) {
+      const result = tryParse(text.slice(arrayStart, arrayEnd + 1));
+      if (result) return result;
+    }
+  }
+
+  // Strategy 4: Find a JSON object with "tasks" key
+  const objStart = text.indexOf("{");
+  if (objStart !== -1) {
+    const objEnd = text.lastIndexOf("}");
+    if (objEnd > objStart) {
+      const result = tryParse(text.slice(objStart, objEnd + 1));
+      if (result) return result;
+    }
+  }
+
+  // Strategy 5: Try parsing the entire text as JSON
+  return tryParse(text);
 }
 
 /** Strip inline markdown formatting (bold, italic, code spans) from a string. */

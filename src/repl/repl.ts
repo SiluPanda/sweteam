@@ -10,6 +10,7 @@ import {
 import { getStatusDisplay, getHelpDisplay } from "../session/in-session-commands.js";
 import { watchLog, getLogPath, isLogActive, writeEvent, type AgentEvent } from "../session/agent-log.js";
 import { AgentPanel } from "../ui/agent-panel.js";
+import { SessionSidebar } from "../ui/sidebar.js";
 import { friendlyError } from "../orchestrator/error-handling.js";
 
 // ── Active session state ────────────────────────────────────────────
@@ -22,6 +23,7 @@ interface ActiveSession {
 }
 
 let activeSession: ActiveSession | null = null;
+const sidebar = new SessionSidebar();
 
 // ── Commands & completions ──────────────────────────────────────────
 
@@ -134,6 +136,7 @@ export function getCompletions(line: string): string[] {
  * Enter/Ctrl-C/Escape.
  */
 function watchBuildLive(sessionId: string): Promise<void> {
+  sidebar.pause();
   return new Promise<void>((resolve) => {
     const panel = new AgentPanel();
     let resolved = false;
@@ -159,6 +162,8 @@ function watchBuildLive(sessionId: string): Promise<void> {
       }
       process.stdin.pause();
       if (reason) console.log(reason);
+      sidebar.invalidate();
+      sidebar.resume();
       resolve();
     }
 
@@ -202,6 +207,7 @@ function watchBuildLive(sessionId: string): Promise<void> {
           panel.completeAgent(event.id, event.success!);
           break;
         case "build-complete":
+        case "phase-complete":
           finish();
           break;
         case "input-needed":
@@ -289,6 +295,8 @@ async function dispatch(command: string, args: string[]): Promise<void> {
             result.repoLocalPath,
           ),
         };
+        sidebar.setActiveSession(result.id);
+        sidebar.invalidate();
         console.log("Type your goal or describe what you want to build.\n");
       }
       break;
@@ -316,6 +324,7 @@ async function dispatch(command: string, args: string[]): Promise<void> {
           repoPath,
         ),
       };
+      sidebar.setActiveSession(session.id);
       console.log(`\nEntered session ${session.id} (${session.repo})`);
       console.log(`  Goal:   ${session.goal || "(not set yet)"}`);
       console.log(`  Status: ${session.status}\n`);
@@ -355,10 +364,19 @@ async function dispatch(command: string, args: string[]): Promise<void> {
         } else {
           console.log("Session stopped. Send a message to resume planning.\n");
         }
-      } else if (session.status === "planning" && session.planJson) {
-        console.log("A plan exists. Type @build or continue chatting.\n");
       } else if (session.status === "planning") {
-        console.log("Describe what you want to build.\n");
+        if (isLogActive(session.id)) {
+          console.log("Planner is running... (press Escape to background)\n");
+          await watchBuildLive(session.id);
+          const updatedPlanning = getSession(session.id);
+          if (updatedPlanning?.planJson) {
+            console.log("Plan ready. Type @build to start building, or continue refining.\n");
+          }
+        } else if (session.planJson) {
+          console.log("A plan exists. Type @build or continue chatting.\n");
+        } else {
+          console.log("Describe what you want to build.\n");
+        }
       }
       break;
     }
@@ -381,7 +399,9 @@ async function dispatch(command: string, args: string[]): Promise<void> {
       // If we stopped the active session, clear it
       if (activeSession && activeSession.id === args[0]) {
         activeSession = null;
+        sidebar.setActiveSession(null);
       }
+      sidebar.invalidate();
       break;
     }
     case "/delete": {
@@ -394,7 +414,9 @@ async function dispatch(command: string, args: string[]): Promise<void> {
       // Clear active session if it was deleted
       if (activeSession && (args[0] === "--all" || activeSession.id === args[0])) {
         activeSession = null;
+        sidebar.setActiveSession(null);
       }
+      sidebar.invalidate();
       break;
     }
     case "/init": {
@@ -474,6 +496,9 @@ export async function runRepl(opts?: ReplOptions): Promise<void> {
   console.log(renderBanner(recent));
   console.log();
 
+  // Start the persistent session sidebar
+  sidebar.start();
+
   // Pre-activate session if provided
   if (opts?.initialSession) {
     const s = opts.initialSession;
@@ -483,6 +508,7 @@ export async function runRepl(opts?: ReplOptions): Promise<void> {
       repoPath: s.repoLocalPath,
       handlers: createSessionHandlers(s.id, s.repo, s.goal, s.repoLocalPath),
     };
+    sidebar.setActiveSession(s.id);
     console.log(`Session ${s.id} active. Describe what you want to build.\n`);
   }
 
@@ -498,6 +524,7 @@ export async function runRepl(opts?: ReplOptions): Promise<void> {
         const short = activeSession.repo.split("/").pop() || activeSession.id;
         console.log(`Left session ${activeSession.id} (${short})`);
         activeSession = null;
+        sidebar.setActiveSession(null);
       }
       continue;
     }
@@ -530,18 +557,20 @@ export async function runRepl(opts?: ReplOptions): Promise<void> {
         );
         if (stopped) {
           activeSession = null;
+          sidebar.setActiveSession(null);
+          sidebar.invalidate();
         }
-        // After @build, auto-attach to the live build output
-        if (trimmed === "@build" && activeSession) {
+        // After @build or @feedback, auto-attach to live output
+        if ((trimmed === "@build" || trimmed.startsWith("@feedback ")) && activeSession) {
           if (isLogActive(activeSession.id)) {
-            console.log("Watching build output... (press Enter or Escape to detach)\n");
+            console.log("Watching output... (press Escape to background)\n");
             await watchBuildLive(activeSession.id);
             // Re-check session status after watching
             const { getSession: gs } = await import("../session/manager.js");
             const updated = gs(activeSession.id);
             if (updated?.status === "awaiting_feedback") {
               console.log("Build complete. Send feedback or @feedback <text>.\n");
-            } else if (updated?.status === "building") {
+            } else if (updated?.status === "building" || updated?.status === "iterating") {
               console.log(getStatusDisplay(activeSession.id));
               console.log("\nBuild running in background. Type @status to check progress.\n");
             }
@@ -557,6 +586,20 @@ export async function runRepl(opts?: ReplOptions): Promise<void> {
     if (activeSession) {
       try {
         await activeSession.handlers.onMessage(trimmed);
+        // Auto-attach to live output (planner or feedback running in background)
+        if (activeSession && isLogActive(activeSession.id)) {
+          await watchBuildLive(activeSession.id);
+          // Show status-appropriate message after watcher detaches
+          if (activeSession) {
+            const updated = getSession(activeSession.id);
+            if (updated?.status === "awaiting_feedback") {
+              console.log("Build complete. Send feedback or @feedback <text>.\n");
+            } else if (updated?.status === "planning" && updated?.planJson) {
+              // Display the planner's response so the user can see the plan
+              console.log("\n" + updated.planJson + "\n");
+            }
+          }
+        }
       } catch (err) {
         console.error(friendlyError(err instanceof Error ? err.message : String(err)));
       }
@@ -567,5 +610,6 @@ export async function runRepl(opts?: ReplOptions): Promise<void> {
     }
   }
 
+  sidebar.stop();
   process.exit(0);
 }

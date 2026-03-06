@@ -67,7 +67,7 @@ describe("integration — state machine transitions", () => {
     expect(validateTransition("awaiting_feedback", "planning")).toBe(false);
     expect(validateTransition("planning", "awaiting_feedback")).toBe(false);
     expect(validateTransition("building", "building")).toBe(false);
-    expect(validateTransition("stopped", "iterating")).toBe(false);
+    expect(validateTransition("stopped", "iterating")).toBe(true);
   });
 
   it("should validate all expected valid transitions", () => {

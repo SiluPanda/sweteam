@@ -19,6 +19,7 @@ export class CodexAdapter implements AgentAdapter {
     prompt: string;
     cwd: string;
     timeout?: number;
+    sessionId?: string;
     onOutput?: (chunk: string) => void;
     onInputNeeded?: (promptText: string) => Promise<string | null>;
   }): Promise<AgentResult> {
@@ -30,7 +31,7 @@ export class CodexAdapter implements AgentAdapter {
         cwd: opts.cwd,
         stdio: ["pipe", "pipe", "pipe"],
       });
-      trackProcess(proc);
+      trackProcess(proc, opts.sessionId);
 
       let stdout = "";
       let stderr = "";

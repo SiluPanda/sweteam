@@ -12,7 +12,7 @@ import { SWETEAM_DIR } from "../db/client.js";
 const LOG_DIR = join(SWETEAM_DIR, "logs");
 
 export interface AgentEvent {
-  type: "agent-start" | "output" | "agent-end" | "build-complete" | "input-needed" | "input-response";
+  type: "agent-start" | "output" | "agent-end" | "build-complete" | "phase-complete" | "input-needed" | "input-response";
   id: string;
   role?: string;
   taskId?: string;
@@ -67,8 +67,8 @@ export function isLogActive(sessionId: string, staleThresholdMs: number = 10_000
     const lastLine = lines[lines.length - 1];
     const lastEvent = JSON.parse(lastLine) as AgentEvent;
 
-    // If the last event is build-complete, the build is done
-    if (lastEvent.type === "build-complete") return false;
+    // If the last event is build-complete or phase-complete, the operation is done
+    if (lastEvent.type === "build-complete" || lastEvent.type === "phase-complete") return false;
 
     // If the last event was written recently, the build is likely still active
     const age = Date.now() - lastEvent.ts;

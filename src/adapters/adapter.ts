@@ -19,6 +19,7 @@ export interface AgentAdapter {
     prompt: string;
     cwd: string;
     timeout?: number;
+    sessionId?: string;
     onOutput?: (chunk: string) => void;
     onInputNeeded?: (promptText: string) => Promise<string | null>;
   }): Promise<AgentResult>;

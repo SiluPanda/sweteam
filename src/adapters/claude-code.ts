@@ -42,6 +42,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     prompt: string;
     cwd: string;
     timeout?: number;
+    sessionId?: string;
     onOutput?: (chunk: string) => void;
     onInputNeeded?: (promptText: string) => Promise<string | null>;
   }): Promise<AgentResult> {
@@ -53,7 +54,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
         cwd: opts.cwd,
         stdio: ["pipe", "pipe", "pipe"],
       });
-      trackProcess(proc);
+      trackProcess(proc, opts.sessionId);
 
       let accumulatedText = "";
       let resultText: string | null = null;

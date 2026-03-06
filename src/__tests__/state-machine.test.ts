@@ -39,8 +39,8 @@ describe("session/state-machine — validateTransition", () => {
     expect(validateTransition("stopped", "building")).toBe(true);
   });
 
-  it("should reject stopped -> iterating (removed)", () => {
-    expect(validateTransition("stopped", "iterating")).toBe(false);
+  it("should allow stopped -> iterating", () => {
+    expect(validateTransition("stopped", "iterating")).toBe(true);
   });
 
   it("should allow stopped -> planning", () => {

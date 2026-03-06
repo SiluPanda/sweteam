@@ -2,12 +2,13 @@ import { execFileSync } from "child_process";
 
 export function validateGhAuth(): { authenticated: boolean; message: string } {
   try {
-    const output = execFileSync("gh", ["auth", "status"], {
+    // gh auth status writes output to stderr, not stdout
+    execFileSync("gh", ["auth", "status"], {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 10000,
     });
-    return { authenticated: true, message: output.trim() };
+    return { authenticated: true, message: "GitHub CLI is authenticated." };
   } catch (err) {
     return {
       authenticated: false,

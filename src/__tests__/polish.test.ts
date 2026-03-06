@@ -94,12 +94,10 @@ describe("Session resume (#task-75)", () => {
     expect(session!.status).toBe("building");
   });
 
-  it("should reject resuming stopped session to iterating (transition removed)", () => {
-    expect(() => resumeSession("s_stopped", "iterate")).toThrow(
-      "Invalid transition",
-    );
+  it("should allow resuming stopped session to iterating", () => {
+    resumeSession("s_stopped", "iterate");
     const session2 = getSession("s_stopped");
-    expect(session2!.status).toBe("stopped");
+    expect(session2!.status).toBe("iterating");
   });
 
   it("should return not resumable for non-existent session", () => {

@@ -14,7 +14,7 @@ const VALID_TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
   building: ["awaiting_feedback", "planning", "stopped"],
   awaiting_feedback: ["building", "iterating", "stopped"],
   iterating: ["awaiting_feedback", "planning", "stopped"],
-  stopped: ["planning", "building"],
+  stopped: ["planning", "building", "iterating"],
 };
 
 export function validateTransition(
@@ -53,6 +53,9 @@ export function transition(sessionId: string, newStatus: SessionStatus): void {
 
   if (newStatus === "stopped") {
     updates.stoppedAt = updates.updatedAt;
+  } else if (currentStatus === "stopped") {
+    // Clear stoppedAt when leaving the stopped state
+    updates.stoppedAt = null;
   }
 
   db.update(sessions).set(updates).where(eq(sessions.id, sessionId)).run();

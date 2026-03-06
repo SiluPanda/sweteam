@@ -4,6 +4,7 @@ import { sessions, tasks as tasksTable } from "../db/schema.js";
 import { transition } from "../session/state-machine.js";
 import { addMessage, getSession } from "../session/manager.js";
 import { parsePlan } from "../planner/plan-parser.js";
+import { loadConfig } from "../config/loader.js";
 import {
   insertTasksFromPlan,
   getTasksForSession,
@@ -11,7 +12,8 @@ import {
   displayTaskId,
   type OrchestratorCallbacks,
 } from "./orchestrator.js";
-import { git, pushBranch, createPR, getDefaultBranch, deleteBranches } from "../git/git.js";
+import { git, pushBranch, createPR, getDefaultBranch, deleteBranches, cleanupWorktrees } from "../git/git.js";
+import { runParallelOrchestrator } from "./parallel-runner.js";
 import { AgentPanel } from "../ui/agent-panel.js";
 import { clearLog, writeEvent, waitForResponse } from "../session/agent-log.js";
 
@@ -185,19 +187,21 @@ export async function handleBuild(
 
   const panel = new AgentPanel();
   let agentCounter = 0;
+  const activeAgentIds = new Map<string, string>(); // taskId:role -> panelId
   const callbacks: OrchestratorCallbacks = {
     onAgentStart: (taskId, taskTitle, role) => {
       const id = `${role.toLowerCase()}-${++agentCounter}`;
+      activeAgentIds.set(`${taskId}:${role}`, id);
       panel.addAgent(id, role, taskId, taskTitle);
       writeEvent(sessionId, { type: "agent-start", id, role, taskId, title: taskTitle });
     },
-    onAgentOutput: (_taskId, role, chunk) => {
-      const id = `${role.toLowerCase()}-${agentCounter}`;
+    onAgentOutput: (taskId, role, chunk) => {
+      const id = activeAgentIds.get(`${taskId}:${role}`) ?? `${role.toLowerCase()}-${agentCounter}`;
       panel.appendOutput(id, chunk);
       writeEvent(sessionId, { type: "output", id, chunk });
     },
-    onAgentEnd: (_taskId, role, success) => {
-      const id = `${role.toLowerCase()}-${agentCounter}`;
+    onAgentEnd: (taskId, role, success) => {
+      const id = activeAgentIds.get(`${taskId}:${role}`) ?? `${role.toLowerCase()}-${agentCounter}`;
       panel.completeAgent(id, success);
       writeEvent(sessionId, { type: "agent-end", id, success });
     },
@@ -208,9 +212,19 @@ export async function handleBuild(
     },
   };
 
+  // Clean up stale worktrees from previous builds
+  const { join } = await import("path");
+  const { homedir } = await import("os");
+  const sessionWtDir = join(homedir(), ".sweteam", "worktrees", sessionId.replace(/[^a-zA-Z0-9_-]/g, "-"));
+  try { cleanupWorktrees(sessionWtDir, repoPath); } catch { /* best effort */ }
+
+  const buildConfig = loadConfig();
+  const useParallel = buildConfig.execution.max_parallel > 1;
   let result: Awaited<ReturnType<typeof runOrchestrator>>;
   try {
-    result = await runOrchestrator(sessionId, repoPath, sessionBranch, callbacks);
+    result = useParallel
+      ? await runParallelOrchestrator(sessionId, repoPath, sessionBranch, callbacks)
+      : await runOrchestrator(sessionId, repoPath, sessionBranch, callbacks);
   } catch (err) {
     panel.destroy();
     writeEvent(sessionId, { type: "build-complete", id: "build" });

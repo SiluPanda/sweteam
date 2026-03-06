@@ -131,9 +131,17 @@ export async function reviewAndMerge(
   maxCycles: number = 3,
   onOutput?: (chunk: string) => void,
   onInputNeeded?: (promptText: string) => Promise<string | null>,
+  options?: {
+    /** Working directory for the task (worktree path). Defaults to repoPath. */
+    taskCwd?: string;
+    /** Lock wrapper for serializing merge operations in parallel mode. */
+    withMergeLock?: <T>(fn: () => Promise<T>) => Promise<T>;
+  },
 ): Promise<{ merged: boolean; reviewResult: ReviewResult }> {
   const config = loadConfig();
   const db = getDb();
+  const taskCwd = options?.taskCwd ?? repoPath;
+  const lock = options?.withMergeLock ?? (async <T>(fn: () => Promise<T>) => fn());
 
   for (let cycle = 0; cycle < maxCycles; cycle++) {
     // Always get a fresh diff for this review cycle
@@ -154,7 +162,7 @@ export async function reviewAndMerge(
 
     if (reviewResult.verdict === "approve") {
       try {
-        mergeTask(task, sessionBranch, repoPath);
+        await lock(async () => mergeTask(task, sessionBranch, repoPath));
       } catch (mergeErr) {
         const mergeMsg = mergeErr instanceof Error ? mergeErr.message : String(mergeErr);
         // Attempt to abort a failed merge to restore clean state
@@ -177,7 +185,7 @@ export async function reviewAndMerge(
 
       // Ensure we're on the task branch before invoking the coder for fixes
       if (task.branchName) {
-        try { git(["checkout", task.branchName], repoPath); } catch { /* may already be on it */ }
+        try { git(["checkout", task.branchName], taskCwd); } catch { /* may already be on it */ }
       }
 
       const coderAdapter = resolveAdapter(config.roles.coder, config);
@@ -189,7 +197,7 @@ Summary: ${reviewResult.summary}`;
 
       await coderAdapter.execute({
         prompt: fixPrompt,
-        cwd: repoPath,
+        cwd: taskCwd,
         timeout: 0,
         onOutput,
         onInputNeeded,
@@ -197,8 +205,8 @@ Summary: ${reviewResult.summary}`;
 
       // Re-commit fixes
       try {
-        git(["add", "-A"], repoPath);
-        git(["commit", "-m", `fix(${displayTaskId(task.id)}): address review feedback (cycle ${cycle + 2})`], repoPath);
+        git(["add", "-A"], taskCwd);
+        git(["commit", "-m", `fix(${displayTaskId(task.id)}): address review feedback (cycle ${cycle + 2})`], taskCwd);
       } catch {
         // No changes to commit
       }
