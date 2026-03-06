@@ -15,7 +15,6 @@ import {
 } from "./orchestrator.js";
 import { pushBranch, git, deleteBranches, cleanupWorktrees } from "../git/git.js";
 import { runParallelOrchestrator } from "./parallel-runner.js";
-import { AgentPanel } from "../ui/agent-panel.js";
 import { clearLog, writeEvent } from "../session/agent-log.js";
 
 export interface PlanDelta {
@@ -263,7 +262,6 @@ export async function handleFeedback(
   // Clear log file so watchers from other processes start fresh
   clearLog(sessionId);
 
-  const panel = new AgentPanel();
   let agentCounter = 0;
 
   if (!allQueued) {
@@ -279,7 +277,6 @@ export async function handleFeedback(
 
     // Planner phase
     const plannerId = "planner-1";
-    panel.addAgent(plannerId, "Planner", sessionId, "Analyzing feedback");
     writeEvent(sessionId, { type: "agent-start", id: plannerId, role: "Planner", taskId: sessionId, title: "Analyzing feedback" });
     agentCounter++;
     const adapter = resolveAdapter(config.roles.planner, config);
@@ -290,14 +287,11 @@ export async function handleFeedback(
         cwd: session.repoLocalPath ?? ".",
         timeout: 0,
         onOutput: (chunk: string) => {
-          panel.appendOutput(plannerId, chunk);
           writeEvent(sessionId, { type: "output", id: plannerId, chunk });
         },
       });
-      panel.completeAgent(plannerId, true);
       writeEvent(sessionId, { type: "agent-end", id: plannerId, success: true });
     } catch (plannerErr) {
-      panel.completeAgent(plannerId, false);
       writeEvent(sessionId, { type: "agent-end", id: plannerId, success: false });
       // Restore session to awaiting_feedback so the user can retry
       try { transition(sessionId, "awaiting_feedback"); } catch { /* may already be transitioned */ }
@@ -347,17 +341,14 @@ export async function handleFeedback(
     onAgentStart: (taskId, taskTitle, role) => {
       const id = `${role.toLowerCase()}-${++agentCounter}`;
       activeAgentIds.set(`${taskId}:${role}`, id);
-      panel.addAgent(id, role, taskId, taskTitle);
       writeEvent(sessionId, { type: "agent-start", id, role, taskId, title: taskTitle });
     },
     onAgentOutput: (taskId, role, chunk) => {
       const id = activeAgentIds.get(`${taskId}:${role}`) ?? `${role.toLowerCase()}-${agentCounter}`;
-      panel.appendOutput(id, chunk);
       writeEvent(sessionId, { type: "output", id, chunk });
     },
     onAgentEnd: (taskId, role, success) => {
       const id = activeAgentIds.get(`${taskId}:${role}`) ?? `${role.toLowerCase()}-${agentCounter}`;
-      panel.completeAgent(id, success);
       writeEvent(sessionId, { type: "agent-end", id, success });
     },
     onInputNeeded: async (taskId, role, promptText) => {
@@ -382,12 +373,10 @@ export async function handleFeedback(
       await runOrchestrator(sessionId, repoPath, sessionBranch, callbacks);
     }
   } catch (err) {
-    panel.destroy();
     writeEvent(sessionId, { type: "build-complete", id: "build" });
     try { transition(sessionId, "awaiting_feedback"); } catch { /* already transitioned */ }
     throw err;
   }
-  panel.destroy();
   writeEvent(sessionId, { type: "build-complete", id: "build" });
 
   // Push updates

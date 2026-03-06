@@ -14,7 +14,6 @@ import {
 } from "./orchestrator.js";
 import { git, pushBranch, createPR, getDefaultBranch, deleteBranches, cleanupWorktrees } from "../git/git.js";
 import { runParallelOrchestrator } from "./parallel-runner.js";
-import { AgentPanel } from "../ui/agent-panel.js";
 import { clearLog, writeEvent, waitForResponse } from "../session/agent-log.js";
 
 export function generatePrBody(
@@ -185,24 +184,20 @@ export async function handleBuild(
   // Clear log file so watchers from other processes start fresh
   clearLog(sessionId);
 
-  const panel = new AgentPanel();
   let agentCounter = 0;
   const activeAgentIds = new Map<string, string>(); // taskId:role -> panelId
   const callbacks: OrchestratorCallbacks = {
     onAgentStart: (taskId, taskTitle, role) => {
       const id = `${role.toLowerCase()}-${++agentCounter}`;
       activeAgentIds.set(`${taskId}:${role}`, id);
-      panel.addAgent(id, role, taskId, taskTitle);
       writeEvent(sessionId, { type: "agent-start", id, role, taskId, title: taskTitle });
     },
     onAgentOutput: (taskId, role, chunk) => {
       const id = activeAgentIds.get(`${taskId}:${role}`) ?? `${role.toLowerCase()}-${agentCounter}`;
-      panel.appendOutput(id, chunk);
       writeEvent(sessionId, { type: "output", id, chunk });
     },
     onAgentEnd: (taskId, role, success) => {
       const id = activeAgentIds.get(`${taskId}:${role}`) ?? `${role.toLowerCase()}-${agentCounter}`;
-      panel.completeAgent(id, success);
       writeEvent(sessionId, { type: "agent-end", id, success });
     },
     onInputNeeded: async (taskId, role, promptText) => {
@@ -226,13 +221,11 @@ export async function handleBuild(
       ? await runParallelOrchestrator(sessionId, repoPath, sessionBranch, callbacks)
       : await runOrchestrator(sessionId, repoPath, sessionBranch, callbacks);
   } catch (err) {
-    panel.destroy();
     writeEvent(sessionId, { type: "build-complete", id: "build" });
     // Build failed before completing — go back to planning so user can @build to retry
     try { transition(sessionId, "planning"); } catch { /* already transitioned */ }
     throw err;
   }
-  panel.destroy();
   writeEvent(sessionId, { type: "build-complete", id: "build" });
 
   // Get final task states
