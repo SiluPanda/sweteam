@@ -148,7 +148,11 @@ export function createSessionHandlers(
       });
 
       planningInProgress = true;
-      plannerStates.set(sessionId, { inProgress: true, startedAt: Date.now(), lastActivityAt: Date.now() });
+      plannerStates.set(sessionId, {
+        inProgress: true,
+        startedAt: Date.now(),
+        lastActivityAt: Date.now(),
+      });
       invokePlanner(sessionId, repo, currentGoal, repoPath, (chunk) => {
         writeEvent(sessionId, { type: 'output', id: plannerId, chunk });
         const ps = plannerStates.get(sessionId);
@@ -180,7 +184,11 @@ export function createSessionHandlers(
         })
         .finally(() => {
           planningInProgress = false;
-          plannerStates.set(sessionId, { inProgress: false, startedAt: null, lastActivityAt: null });
+          plannerStates.set(sessionId, {
+            inProgress: false,
+            startedAt: null,
+            lastActivityAt: null,
+          });
         });
 
       // Give the planner a moment to start writing events
