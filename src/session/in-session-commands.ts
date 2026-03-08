@@ -97,10 +97,12 @@ export function getStatusDisplay(sessionId: string): string {
   const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
   const bar = '█'.repeat(Math.floor(pct / 5)) + '░'.repeat(20 - Math.floor(pct / 5));
 
+  const active = counts.running + counts.reviewing + counts.fixing;
+
   lines.push('');
   lines.push(`Progress: [${bar}] ${pct}% (${doneCount}/${total})`);
   lines.push(
-    `  Queued: ${counts.queued} | Running: ${counts.running} | Done: ${counts.done} | Failed: ${counts.failed} | Blocked: ${counts.blocked}`,
+    `  Queued: ${counts.queued} | Running: ${active} | Done: ${counts.done} | Failed: ${counts.failed} | Blocked: ${counts.blocked}`,
   );
 
   return lines.join('\n');

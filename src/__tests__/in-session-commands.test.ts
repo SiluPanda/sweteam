@@ -100,6 +100,77 @@ describe('in-session-commands', () => {
       expect(output).toContain('1/3');
     });
 
+    it('should count reviewing and fixing tasks as Running', () => {
+      const db = getDb();
+      const now = new Date();
+
+      db.insert(sessions)
+        .values({
+          id: 's_review',
+          repo: 'owner/repo',
+          goal: 'Test review states',
+          status: 'building',
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+
+      db.insert(tasksTable)
+        .values([
+          {
+            id: 't-r1',
+            sessionId: 's_review',
+            title: 'Task running',
+            description: 'D',
+            status: 'running',
+            order: 1,
+            createdAt: now,
+            updatedAt: now,
+          },
+          {
+            id: 't-r2',
+            sessionId: 's_review',
+            title: 'Task reviewing',
+            description: 'D',
+            status: 'reviewing',
+            order: 2,
+            createdAt: now,
+            updatedAt: now,
+          },
+          {
+            id: 't-r3',
+            sessionId: 's_review',
+            title: 'Task fixing',
+            description: 'D',
+            status: 'fixing',
+            order: 3,
+            createdAt: now,
+            updatedAt: now,
+          },
+          {
+            id: 't-r4',
+            sessionId: 's_review',
+            title: 'Task done',
+            description: 'D',
+            status: 'done',
+            order: 4,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ])
+        .run();
+
+      const output = getStatusDisplay('s_review');
+      // All three active states (running, reviewing, fixing) count as Running
+      expect(output).toContain('Running: 3');
+      expect(output).toContain('Done: 1');
+      expect(output).toContain('1/4');
+      // Individual task lines still show exact status
+      expect(output).toContain('[running]');
+      expect(output).toContain('[reviewing]');
+      expect(output).toContain('[fixing]');
+    });
+
     it('should show empty message when no tasks', () => {
       const output = getStatusDisplay('nonexistent');
       expect(output).toContain('No tasks yet');

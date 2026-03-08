@@ -3,6 +3,7 @@ import React from 'react';
 import { ChatMessageComponent, ChatList, type ChatMessage } from '../tui/chat-ui.js';
 import { TaskRow, Dashboard, type DashboardTask } from '../tui/dashboard.js';
 import { SessionRow, SessionListView, type SessionEntry } from '../tui/session-list.js';
+import { SessionSidebar } from '../ui/sidebar.js';
 
 describe('tui/chat-ui — ChatMessageComponent', () => {
   it('should create a React element', () => {
@@ -82,5 +83,31 @@ describe('tui/session-list — SessionListView', () => {
   it('should handle empty sessions', () => {
     const el = React.createElement(SessionListView, { sessions: [] });
     expect(el).toBeTruthy();
+  });
+});
+
+describe('ui/sidebar — SessionSidebar label', () => {
+  // Access private label() via prototype to test status text logic
+  const sidebar = new SessionSidebar();
+  const label = (
+    sidebar as unknown as Record<string, (s: string, a: boolean) => string>
+  ).label.bind(sidebar);
+
+  it('should show "building" not "build paused" when log is inactive', () => {
+    const text = label('building', false);
+    expect(text).toContain('building');
+    expect(text).not.toContain('paused');
+  });
+
+  it('should show "building…" when log is active', () => {
+    const text = label('building', true);
+    expect(text).toContain('building');
+  });
+
+  it('should show correct labels for all statuses', () => {
+    expect(label('planning', true)).toContain('planning');
+    expect(label('iterating', false)).toContain('iterating');
+    expect(label('awaiting_feedback', false)).toContain('needs feedback');
+    expect(label('stopped', false)).toContain('stopped');
   });
 });

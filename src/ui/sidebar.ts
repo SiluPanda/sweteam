@@ -169,7 +169,7 @@ export class SessionSidebar {
       case 'planning':
         return active ? chalk.blue('planning…') : chalk.blue('planning');
       case 'building':
-        return active ? chalk.yellow('building…') : chalk.yellow('build paused');
+        return active ? chalk.yellow('building…') : chalk.yellow('building');
       case 'iterating':
         return active ? chalk.magenta('iterating…') : chalk.magenta('iterating');
       case 'awaiting_feedback':
