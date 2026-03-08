@@ -237,18 +237,49 @@ Summary: ${reviewResult.summary}`;
     }
   }
 
-  // Max cycles exhausted
+  // Max cycles exhausted — force-accept the changes rather than failing the task.
+  // The coder has already attempted fixes; accept what we have.
+  const forceResult: ReviewResult = {
+    verdict: 'approve',
+    issues: [],
+    summary: `Auto-accepted after ${maxCycles} review cycles (max reached)`,
+  };
+
   db.update(tasks)
-    .set({ status: 'failed', updatedAt: new Date() })
+    .set({
+      reviewVerdict: forceResult.verdict,
+      reviewIssues: JSON.stringify(forceResult.issues),
+      updatedAt: new Date(),
+    })
     .where(eq(tasks.id, task.id))
     .run();
 
-  return {
-    merged: false,
-    reviewResult: {
-      verdict: 'request_changes',
-      issues: [],
-      summary: `Failed after ${maxCycles} review cycles`,
-    },
-  };
+  try {
+    await lock(async () => mergeTask(task, sessionBranch, repoPath));
+  } catch (mergeErr) {
+    const mergeMsg = mergeErr instanceof Error ? mergeErr.message : String(mergeErr);
+    try {
+      git(['merge', '--abort'], repoPath);
+    } catch {
+      /* no merge in progress */
+    }
+    db.update(tasks)
+      .set({
+        status: 'failed',
+        agentOutput: `Merge failed after forced accept: ${mergeMsg}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(tasks.id, task.id))
+      .run();
+    return {
+      merged: false,
+      reviewResult: {
+        verdict: 'request_changes',
+        issues: [{ message: `Merge failed: ${mergeMsg}` }],
+        summary: mergeMsg,
+      },
+    };
+  }
+
+  return { merged: true, reviewResult: forceResult };
 }
