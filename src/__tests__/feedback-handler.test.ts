@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -11,6 +11,7 @@ import {
   createIteration,
   getIterationHistory,
 } from "../orchestrator/feedback-handler.js";
+import { createSessionHandlers } from "../session/interactive.js";
 
 describe("feedback-handler — buildFeedbackPrompt", () => {
   it("should include plan, tasks, feedback, and history", () => {
@@ -126,5 +127,83 @@ describe("feedback-handler — iteration tracking", () => {
     expect(history.length).toBe(2);
     expect(history[0].feedback).toBe("Feedback 1");
     expect(history[1].feedback).toBe("Feedback 2");
+  });
+});
+
+describe("feedback during planning — routes to planner", () => {
+  const tempDirs: string[] = [];
+
+  beforeEach(() => {
+    const dir = mkdtempSync(join(tmpdir(), "sweteam-fb-planning-"));
+    tempDirs.push(dir);
+    const db = getDb(join(dir, "test.db"));
+
+    db.insert(sessions)
+      .values({
+        id: "s_plan_fb",
+        repo: "owner/repo",
+        repoLocalPath: "/tmp/fake-repo",
+        goal: "Build a feature",
+        status: "planning",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .run();
+  });
+
+  afterEach(() => {
+    closeDb();
+    for (const dir of tempDirs) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+    tempDirs.length = 0;
+    vi.restoreAllMocks();
+  });
+
+  it("should delegate to onMessage when session is in planning state", async () => {
+    // Mock the planner so it doesn't actually spawn a process
+    const plannerMod = await import("../planner/planner.js");
+    const plannerSpy = vi.spyOn(plannerMod, "invokePlanner").mockResolvedValue("Refined plan response");
+
+    // Mock agent-log to prevent file I/O
+    const agentLogMod = await import("../session/agent-log.js");
+    vi.spyOn(agentLogMod, "clearLog").mockImplementation(() => {});
+    vi.spyOn(agentLogMod, "writeEvent").mockImplementation(() => {});
+
+    const handlers = createSessionHandlers("s_plan_fb", "owner/repo", "Build a feature", "/tmp/fake-repo");
+
+    // This should NOT throw "Invalid transition: planning → iterating"
+    await handlers.onFeedback("Make the plan more comprehensive");
+
+    // Verify it invoked the planner (not handleFeedback's iteration flow)
+    expect(plannerSpy).toHaveBeenCalled();
+
+    // Verify the session is still in planning state (not iterating)
+    const db = getDb();
+    const rows = db
+      .select({ status: sessions.status })
+      .from(sessions)
+      .where(eq(sessions.id, "s_plan_fb"))
+      .all();
+    expect(rows[0].status).toBe("planning");
+  });
+
+  it("should not invoke planner when session is awaiting_feedback", async () => {
+    // Change session to awaiting_feedback
+    const db = getDb();
+    db.update(sessions)
+      .set({ status: "awaiting_feedback" })
+      .where(eq(sessions.id, "s_plan_fb"))
+      .run();
+
+    // Mock handleFeedback to prevent it from actually running
+    const fbMod = await import("../orchestrator/feedback-handler.js");
+    const fbSpy = vi.spyOn(fbMod, "handleFeedback").mockResolvedValue();
+
+    const handlers = createSessionHandlers("s_plan_fb", "owner/repo", "Build a feature", "/tmp/fake-repo");
+    await handlers.onFeedback("Fix the colors");
+
+    // Verify it called handleFeedback (the iteration path), not the planner
+    expect(fbSpy).toHaveBeenCalledWith("s_plan_fb", "Fix the colors");
   });
 });

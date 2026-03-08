@@ -153,5 +153,40 @@ describe("in-session-commands", () => {
       expect(output).toContain("@stop");
       expect(output).toContain("@help");
     });
+
+    it("should show @feedback as applicable during planning", () => {
+      const db = getDb();
+      db.insert(sessions)
+        .values({
+          id: "s_planning_help",
+          repo: "r",
+          goal: "g",
+          status: "planning",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .run();
+
+      const output = getHelpDisplay("s_planning_help");
+      expect(output).toContain("@feedback");
+      expect(output).not.toMatch(/@feedback.*not applicable/);
+    });
+
+    it("should show @feedback as not applicable during stopped", () => {
+      const db = getDb();
+      db.insert(sessions)
+        .values({
+          id: "s_stopped_help",
+          repo: "r",
+          goal: "g",
+          status: "stopped",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .run();
+
+      const output = getHelpDisplay("s_stopped_help");
+      expect(output).toMatch(/@feedback.*not applicable/);
+    });
   });
 });

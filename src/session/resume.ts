@@ -38,8 +38,8 @@ export function canResume(sessionId: string): {
   if (session.status === "planning") {
     return {
       resumable: true,
-      allowedActions: ["@build", "chat"],
-      message: `Session is in planning. Continue chatting or type @build when ready.`,
+      allowedActions: ["@build", "@feedback", "chat"],
+      message: `Session is in planning. Continue chatting, use @feedback to refine the plan, or type @build when ready.`,
     };
   }
 

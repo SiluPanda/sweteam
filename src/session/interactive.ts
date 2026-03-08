@@ -71,7 +71,7 @@ export function createSessionHandlers(
   let buildInProgress = false;
   let planningInProgress = false;
 
-  return {
+  const handlers: SessionHandlers = {
     onMessage: async (text: string): Promise<void> => {
       // Capture the first user message as the session goal if not set
       if (!currentGoal) {
@@ -224,6 +224,13 @@ export function createSessionHandlers(
     },
 
     onFeedback: async (text: string): Promise<void> => {
+      // During planning, feedback refines the plan — route through the planner
+      const session = getSession(sessionId);
+      if (session?.status === "planning") {
+        console.log("\nRefining plan with your feedback...\n");
+        return handlers.onMessage(text);
+      }
+
       console.log("\nProcessing feedback...\n");
       handleFeedback(sessionId, text)
         .catch((err) => {
@@ -306,6 +313,8 @@ export function createSessionHandlers(
       console.log(getHelpDisplay(sessionId));
     },
   };
+
+  return handlers;
 }
 
 /**

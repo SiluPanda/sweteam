@@ -80,6 +80,7 @@ describe("Session resume (#task-75)", () => {
     const result = canResume("s_planning");
     expect(result.resumable).toBe(true);
     expect(result.allowedActions).toContain("@build");
+    expect(result.allowedActions).toContain("@feedback");
   });
 
   it("should identify awaiting_feedback as resumable", () => {
