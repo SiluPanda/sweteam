@@ -1,9 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import React from 'react';
 import { ChatMessageComponent, ChatList, type ChatMessage } from '../tui/chat-ui.js';
 import { TaskRow, Dashboard, type DashboardTask } from '../tui/dashboard.js';
 import { SessionRow, SessionListView, type SessionEntry } from '../tui/session-list.js';
-import { SessionSidebar } from '../ui/sidebar.js';
 
 describe('tui/chat-ui — ChatMessageComponent', () => {
   it('should create a React element', () => {
@@ -86,12 +85,20 @@ describe('tui/session-list — SessionListView', () => {
   });
 });
 
-describe('ui/sidebar — SessionSidebar label', () => {
-  // Access private label() via prototype to test status text logic
-  const sidebar = new SessionSidebar();
-  const label = (
-    sidebar as unknown as Record<string, (s: string, a: boolean) => string>
-  ).label.bind(sidebar);
+// Sidebar imports chalk v5 which uses regex v flag (Node 20+ only).
+// Use dynamic import to avoid crashing Node 18 at module load time.
+const nodeMajor = parseInt(process.version.slice(1), 10);
+
+describe.skipIf(nodeMajor < 20)('ui/sidebar — SessionSidebar label', () => {
+  let label: (s: string, a: boolean) => string;
+
+  beforeAll(async () => {
+    const { SessionSidebar } = await import('../ui/sidebar.js');
+    const sidebar = new SessionSidebar();
+    label = (sidebar as unknown as Record<string, (s: string, a: boolean) => string>).label.bind(
+      sidebar,
+    );
+  });
 
   it('should show "building" not "build paused" when log is inactive', () => {
     const text = label('building', false);
