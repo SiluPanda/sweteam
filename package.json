@@ -1,6 +1,6 @@
 {
   "name": "sweteam",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Autonomous coding agent orchestrator — turns high-level goals into PR'd code",
   "type": "module",
   "bin": {
