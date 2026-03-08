@@ -151,6 +151,82 @@ Tell the user to type @build when ready.
 Do NOT generate code. Only plan.`;
 }
 
+export function buildArchitectPrompt(
+  repo: string,
+  goal: string,
+  repoPath: string,
+  sessionStatus: string,
+  tasksSummary: string,
+  chatHistory: Array<{ role: string; content: string }>,
+  question: string,
+): string {
+  const fileTree = getFilteredFileTree(repoPath).join("\n");
+  const manifest = getManifestContents(repoPath) ?? "(not found)";
+  const commits = getRecentCommits(repoPath);
+
+  const historyText = chatHistory
+    .map((m) => `[${m.role}] ${m.content}`)
+    .join("\n\n");
+
+  return `You are a senior software architect. The user is asking you a question about an ongoing development session. Answer concisely and helpfully based on the context below.
+
+## Repository
+- Name: ${repo}
+- File tree:
+${fileTree}
+
+- Package manifest:
+${manifest}
+
+- Recent commits:
+${commits}
+
+## Session Context
+- Goal: ${goal}
+- Current status: ${sessionStatus}
+
+## Task Progress
+${tasksSummary || "(no tasks created yet)"}
+
+## Conversation History
+${historyText || "(no messages yet)"}
+
+## User's Question
+${question}
+
+Answer the question directly. Reference specific tasks, files, or context as needed. Do NOT propose new plans or generate code — just answer what was asked.`;
+}
+
+export async function invokeArchitect(
+  sessionId: string,
+  repo: string,
+  goal: string,
+  repoPath: string,
+  sessionStatus: string,
+  tasksSummary: string,
+  question: string,
+  onOutput?: (chunk: string) => void,
+): Promise<string> {
+  const config = loadConfig();
+  const adapter = resolveAdapter(config.roles.planner, config);
+
+  const chatHistory = getMessages(sessionId).map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
+
+  const prompt = buildArchitectPrompt(repo, goal, repoPath, sessionStatus, tasksSummary, chatHistory, question);
+
+  const result = await adapter.execute({
+    prompt,
+    cwd: repoPath,
+    timeout: 0,
+    onOutput,
+  });
+
+  return result.output;
+}
+
 export async function invokePlanner(
   sessionId: string,
   repo: string,

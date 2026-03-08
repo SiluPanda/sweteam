@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../db/client.js";
 import { sessions } from "../db/schema.js";
 import { stopSession, addMessage, getSession } from "./manager.js";
-import { invokePlanner } from "../planner/planner.js";
+import { invokePlanner, invokeArchitect } from "../planner/planner.js";
 import { handleBuild } from "../orchestrator/build-handler.js";
 import { handleFeedback } from "../orchestrator/feedback-handler.js";
 import { transition } from "./state-machine.js";
@@ -40,6 +40,8 @@ export interface SessionHandlers {
   onPr: () => Promise<void>;
   /** List tasks. */
   onTasks: () => Promise<void>;
+  /** Ask the architect agent a question about the development process. */
+  onAsk: (question: string) => Promise<void>;
   /** Show available session commands. */
   onHelp: () => void;
 }
@@ -254,6 +256,52 @@ export function createSessionHandlers(
       console.log(await getTasksDisplay(sessionId));
     },
 
+    onAsk: async (question: string): Promise<void> => {
+      const session = getSession(sessionId);
+      const status = session?.status ?? "unknown";
+
+      // Build task summary from DB
+      const { getTasksForSession } = await import("../orchestrator/orchestrator.js");
+      const sessionTasks = getTasksForSession(sessionId);
+      const tasksSummary = sessionTasks.length > 0
+        ? sessionTasks.map((t) => `  ${t.id}: ${t.title} [${t.status}]`).join("\n")
+        : "";
+
+      addMessage(sessionId, "user", `@ask ${question}`, { phase: "ask" });
+
+      const askId = "architect";
+      clearLog(sessionId);
+      writeEvent(sessionId, { type: "agent-start", id: askId, role: "Architect", taskId: sessionId, title: question });
+
+      invokeArchitect(
+        sessionId,
+        repo,
+        currentGoal,
+        repoPath,
+        status,
+        tasksSummary,
+        question,
+        (chunk) => {
+          writeEvent(sessionId, { type: "output", id: askId, chunk });
+        },
+      )
+        .then((response) => {
+          writeEvent(sessionId, { type: "agent-end", id: askId, success: true });
+          addMessage(sessionId, "agent", response, { phase: "ask" });
+          writeEvent(sessionId, { type: "phase-complete", id: askId });
+        })
+        .catch((err) => {
+          writeEvent(sessionId, { type: "agent-end", id: askId, success: false });
+          const msg = err instanceof Error ? err.message : String(err);
+          const errResponse = `Error invoking architect: ${friendlyError(msg)}`;
+          addMessage(sessionId, "agent", errResponse, { phase: "ask" });
+          writeEvent(sessionId, { type: "phase-complete", id: askId });
+        });
+
+      // Give the architect a moment to start writing events
+      await new Promise((r) => setTimeout(r, 300));
+    },
+
     onHelp: (): void => {
       console.log(getHelpDisplay(sessionId));
     },
@@ -287,6 +335,10 @@ export async function handleSessionCommand(
     await handlers.onPr();
   } else if (trimmed === "@tasks") {
     await handlers.onTasks();
+  } else if (trimmed === "@ask") {
+    console.log("Usage: @ask <your question>");
+  } else if (trimmed.startsWith("@ask ")) {
+    await handlers.onAsk(trimmed.slice("@ask ".length));
   } else if (trimmed === "@feedback") {
     console.log("Usage: @feedback <your feedback text>");
   } else if (trimmed.startsWith("@feedback ")) {

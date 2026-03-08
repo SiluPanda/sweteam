@@ -254,6 +254,7 @@ export function getHelpDisplay(sessionId?: string): string {
   lines.push("  @diff       Show the current cumulative diff");
   lines.push("  @pr         Show the PR link");
   lines.push("  @tasks      List all tasks and their statuses");
+  lines.push("  @ask        Ask the architect about the development process");
   lines.push("  @stop       Stop this session");
   lines.push("  @help       Show this help message");
   lines.push("");
