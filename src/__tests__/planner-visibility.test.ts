@@ -55,9 +55,7 @@ describe('planner visibility — @status during planning', () => {
     const lifecycleMod = await import('../lifecycle.js');
     vi.spyOn(lifecycleMod, 'hasActiveProcesses').mockReturnValue(true);
 
-    const { createSessionHandlers, getPlannerState } = await import(
-      '../session/interactive.js'
-    );
+    const { createSessionHandlers, getPlannerState } = await import('../session/interactive.js');
     const { getStatusDisplay } = await import('../session/in-session-commands.js');
 
     const handlers = createSessionHandlers(
@@ -112,9 +110,7 @@ describe('planner visibility — @status during planning', () => {
     const lifecycleMod = await import('../lifecycle.js');
     vi.spyOn(lifecycleMod, 'hasActiveProcesses').mockReturnValue(true);
 
-    const { createSessionHandlers, getPlannerState } = await import(
-      '../session/interactive.js'
-    );
+    const { createSessionHandlers, getPlannerState } = await import('../session/interactive.js');
     const { getStatusDisplay } = await import('../session/in-session-commands.js');
 
     const handlers = createSessionHandlers(
@@ -156,9 +152,7 @@ describe('planner visibility — @status during planning', () => {
     const lifecycleMod = await import('../lifecycle.js');
     vi.spyOn(lifecycleMod, 'hasActiveProcesses').mockReturnValue(false);
 
-    const { createSessionHandlers, getPlannerState } = await import(
-      '../session/interactive.js'
-    );
+    const { createSessionHandlers, getPlannerState } = await import('../session/interactive.js');
     const { getStatusDisplay } = await import('../session/in-session-commands.js');
 
     const handlers = createSessionHandlers(
@@ -278,9 +272,7 @@ describe('planner visibility — @cancel command', () => {
     vi.spyOn(lifecycleMod, 'killSessionProcesses').mockImplementation(() => {});
     vi.spyOn(lifecycleMod, 'hasActiveProcesses').mockReturnValue(true);
 
-    const { createSessionHandlers, getPlannerState } = await import(
-      '../session/interactive.js'
-    );
+    const { createSessionHandlers, getPlannerState } = await import('../session/interactive.js');
 
     const handlers = createSessionHandlers(
       's_cancel',
@@ -357,9 +349,7 @@ describe('planner visibility — @cancel command', () => {
     vi.spyOn(lifecycleMod, 'killSessionProcesses').mockImplementation(() => {});
     vi.spyOn(lifecycleMod, 'hasActiveProcesses').mockReturnValue(true);
 
-    const { createSessionHandlers, getPlannerState } = await import(
-      '../session/interactive.js'
-    );
+    const { createSessionHandlers, getPlannerState } = await import('../session/interactive.js');
 
     const handlers = createSessionHandlers(
       's_cancel',
@@ -416,16 +406,10 @@ describe('planner visibility — @cancel in handleSessionCommand', () => {
   });
 
   it('should route @cancel to onCancel handler', async () => {
-    const { handleSessionCommand, createSessionHandlers } = await import(
-      '../session/interactive.js'
-    );
+    const { handleSessionCommand, createSessionHandlers } =
+      await import('../session/interactive.js');
 
-    const handlers = createSessionHandlers(
-      's_cmdtest',
-      'owner/repo',
-      'Test',
-      '/tmp/fake-repo',
-    );
+    const handlers = createSessionHandlers('s_cmdtest', 'owner/repo', 'Test', '/tmp/fake-repo');
 
     const cancelSpy = vi.spyOn(handlers, 'onCancel').mockResolvedValue();
 

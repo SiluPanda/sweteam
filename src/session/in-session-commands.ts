@@ -80,7 +80,9 @@ export function getStatusDisplay(sessionId: string): string {
         if (sinceActivity > 60_000) {
           lines.push(`  ⚠ No output for ${formatDuration(sinceActivity)}`);
           if (!processAlive) {
-            lines.push('  ⚠ Planner process may have crashed. Try @cancel then resend your message.');
+            lines.push(
+              '  ⚠ Planner process may have crashed. Try @cancel then resend your message.',
+            );
           } else {
             lines.push('  Process is alive — agent may be thinking.');
           }

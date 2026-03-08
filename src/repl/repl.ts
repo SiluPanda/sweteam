@@ -231,9 +231,7 @@ function watchBuildLive(sessionId: string): Promise<void> {
         );
       } else if (idle > 30_000 && !warnedAt30s) {
         warnedAt30s = true;
-        process.stdout.write(
-          '\nStill waiting for output... (agent may be thinking)\n',
-        );
+        process.stdout.write('\nStill waiting for output... (agent may be thinking)\n');
       }
     }, 1000);
 
