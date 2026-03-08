@@ -20,7 +20,7 @@ describe('integration — git operations with array args', () => {
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'sweteam-integ-'));
-    execSync('git init', { cwd: dir });
+    execSync('git init -b main', { cwd: dir });
     execSync('git config user.email "test@test.com"', { cwd: dir });
     execSync('git config user.name "Test"', { cwd: dir });
     writeFileSync(join(dir, 'README.md'), '# Test');

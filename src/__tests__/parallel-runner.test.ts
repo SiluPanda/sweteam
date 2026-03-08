@@ -372,7 +372,7 @@ describe('parallel runner — worktree integration', () => {
     // Use realpathSync to resolve macOS symlinks (/tmp -> /private/tmp)
     // so that paths match what git worktree reports
     const dir = realpathSync(mkdtempSync(join(tmpdir(), 'sweteam-par-test-')));
-    execFileSync('git', ['init', dir]);
+    execFileSync('git', ['init', '-b', 'main', dir]);
     execFileSync('git', ['-C', dir, 'config', 'user.email', 'test@test.com']);
     execFileSync('git', ['-C', dir, 'config', 'user.name', 'Test']);
     execFileSync('git', ['-C', dir, 'commit', '--allow-empty', '-m', 'init']);

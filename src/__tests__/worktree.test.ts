@@ -8,7 +8,7 @@ import { git, addWorktree, removeWorktree, listWorktrees, cleanupWorktrees } fro
 function initRepo(): string {
   // Use realpathSync to resolve symlinks (e.g. /var -> /private/var on macOS)
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'sweteam-wt-test-')));
-  execFileSync('git', ['init', dir]);
+  execFileSync('git', ['init', '-b', 'main', dir]);
   execFileSync('git', ['-C', dir, 'config', 'user.email', 'test@test.com']);
   execFileSync('git', ['-C', dir, 'config', 'user.name', 'Test']);
   // Create an initial commit so branches can be created

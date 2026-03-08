@@ -17,10 +17,13 @@ describe('git/git — resolveRepo', () => {
     expect(result).toBe('SiluPanda/weav');
   });
 
-  it('should resolve short name via gh api', () => {
-    // This test requires gh auth — it calls the real gh CLI
-    const result = resolveRepo('sweteam');
-    expect(result).toContain('/sweteam');
-    expect(result).toMatch(/^[^/]+\/sweteam$/);
-  });
+  it.skipIf(!process.env.GH_TOKEN && !process.env.GITHUB_TOKEN)(
+    'should resolve short name via gh api',
+    () => {
+      // This test requires gh auth — it calls the real gh CLI
+      const result = resolveRepo('sweteam');
+      expect(result).toContain('/sweteam');
+      expect(result).toMatch(/^[^/]+\/sweteam$/);
+    },
+  );
 });
