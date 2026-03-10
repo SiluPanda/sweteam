@@ -65,13 +65,13 @@
     nav .nav-links { display: flex; gap: 1.5rem; flex-wrap: wrap; }
     nav .nav-links a { color: #94a3b8; font-size: 0.9rem; font-weight: 500; }
     nav .nav-links a:hover { color: #f1f5f9; }
-    .github-link {
+    .github-link, .npm-link {
       display: inline-flex; align-items: center; gap: 0.4rem;
       background: #1e293b; padding: 0.4rem 0.9rem; border-radius: 6px;
       font-size: 0.85rem; font-weight: 500; color: #e2e8f0 !important;
       transition: background 0.2s;
     }
-    .github-link:hover { background: #334155; }
+    .github-link:hover, .npm-link:hover { background: #334155; }
 
     /* ─── Hero ─────────────────────────────────────────── */
     .hero {
@@ -338,6 +338,10 @@
       <a href="#configuration">Configuration</a>
       <a href="#feature-todo">Roadmap</a>
     </div>
+    <a href="https://www.npmjs.com/package/sweteam" class="npm-link" target="_blank" rel="noopener">
+      <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M0 0v16h16V0H0zm13 13H8V5h-2v8H3V3h10v10z"/></svg>
+      npm
+    </a>
     <a href="https://github.com/SiluPanda/sweteam" class="github-link" target="_blank" rel="noopener">
       <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
       GitHub
@@ -461,6 +465,10 @@
 
     <div class="hero-actions">
       <a href="#quickstart" class="btn btn-primary">Get Started</a>
+      <a href="https://www.npmjs.com/package/sweteam" class="btn btn-secondary" target="_blank" rel="noopener">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M0 0v16h16V0H0zm13 13H8V5h-2v8H3V3h10v10z"/></svg>
+        View on npm
+      </a>
       <a href="https://github.com/SiluPanda/sweteam" class="btn btn-secondary" target="_blank" rel="noopener">
         <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         View on GitHub
