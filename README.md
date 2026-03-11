@@ -94,7 +94,7 @@ sweteam doesn't replace your coding agents. It gives them the same structure tha
 When you launch `sweteam`, you're greeted with an interactive REPL:
 
 ```
-╭─── sweteam v0.1.0 ────────────────────────────────────────────╮
+╭─── sweteam v0.7.0 ────────────────────────────────────────────╮
 │                                │                              │
 │    Welcome to sweteam!         │ Getting started              │
 │                                │ /create [repo]  Start new    │
@@ -103,7 +103,7 @@ When you launch `sweteam`, you're greeted with an interactive REPL:
 │      │    ─────────    │       │ ──────────────────────────── │
 │      └─────────────────┘       │ Recent sessions              │
 │                                │ s_a1b2c3d4 Add dark theme    │
-│  Orchestrator · v0.1.0         │ s_e5f6g7h8 Fix auth flow     │
+│  Orchestrator · v0.7.0         │ s_e5f6g7h8 Fix auth flow     │
 │  ~/projects/myrepo             │                              │
 ╰───────────────────────────────────────────────────────────────╯
 

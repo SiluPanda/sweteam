@@ -12,6 +12,7 @@ import { watchLog, isLogActive, writeEvent, type AgentEvent } from '../session/a
 import { AgentPanel } from '../ui/agent-panel.js';
 import { SessionSidebar } from '../ui/sidebar.js';
 import { friendlyError } from '../orchestrator/error-handling.js';
+import { hasActiveProcesses } from '../lifecycle.js';
 
 // ── Active session state ────────────────────────────────────────────
 
@@ -278,7 +279,7 @@ function watchBuildLive(sessionId: string): Promise<void> {
       } else if (idle > 120_000 && !warnedAt2m) {
         warnedAt2m = true;
         process.stdout.write(
-          '\n⚠ No output for 2 minutes. Type @cancel to abort, or keep waiting.\n',
+          '\n⚠ No output for 2 minutes. Press Escape to detach, then @stop to cancel.\n',
         );
       } else if (idle > 30_000 && !warnedAt30s) {
         warnedAt30s = true;
@@ -339,8 +340,8 @@ async function dispatch(command: string, args: string[]): Promise<void> {
 
       // Status-aware guidance on re-entry
       if (session.status === 'building' || session.status === 'iterating') {
-        // Check if a build is actually running (log has recent writes)
-        if (isLogActive(session.id)) {
+        // Check if a build is actually running (log has recent writes OR processes alive)
+        if (isLogActive(session.id) || hasActiveProcesses(session.id)) {
           console.log('Attaching to live build output... (press Enter or Escape to detach)\n');
           await watchBuildLive(session.id);
           // Re-check status after watching — build may have completed
@@ -354,7 +355,7 @@ async function dispatch(command: string, args: string[]): Promise<void> {
             );
           }
         } else {
-          // Build is stale — transition back to planning so @build can work
+          // Build is truly stale — no log activity AND no running processes
           try {
             transition(session.id, 'planning');
           } catch {
@@ -382,7 +383,7 @@ async function dispatch(command: string, args: string[]): Promise<void> {
           console.log('Session stopped. Send a message to resume planning.\n');
         }
       } else if (session.status === 'planning') {
-        if (isLogActive(session.id)) {
+        if (isLogActive(session.id) || hasActiveProcesses(session.id)) {
           console.log('Planner is running... (press Escape to background)\n');
           await watchBuildLive(session.id);
           const updatedPlanning = getSession(session.id);
@@ -578,7 +579,7 @@ export async function runRepl(opts?: ReplOptions): Promise<void> {
 
       // @watch — re-attach to live agent output
       if (trimmed === '@watch') {
-        if (isLogActive(activeSession.id)) {
+        if (isLogActive(activeSession.id) || hasActiveProcesses(activeSession.id)) {
           console.log('Attaching to live output... (press Enter or Escape to detach)\n');
           await watchBuildLive(activeSession.id);
           const { getSession: gs } = await import('../session/manager.js');
@@ -601,7 +602,7 @@ export async function runRepl(opts?: ReplOptions): Promise<void> {
         }
         // After @build or @feedback, auto-attach to live output
         if ((trimmed === '@build' || trimmed.startsWith('@feedback ')) && activeSession) {
-          if (isLogActive(activeSession.id)) {
+          if (isLogActive(activeSession.id) || hasActiveProcesses(activeSession.id)) {
             console.log('Watching output... (press Escape to background)\n');
             await watchBuildLive(activeSession.id);
             // Re-check session status after watching
@@ -626,7 +627,7 @@ export async function runRepl(opts?: ReplOptions): Promise<void> {
       try {
         await activeSession.handlers.onMessage(trimmed);
         // Auto-attach to live output (planner or feedback running in background)
-        if (activeSession && isLogActive(activeSession.id)) {
+        if (activeSession && (isLogActive(activeSession.id) || hasActiveProcesses(activeSession.id))) {
           await watchBuildLive(activeSession.id);
           // Show status-appropriate message after watcher detaches
           if (activeSession) {

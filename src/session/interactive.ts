@@ -104,11 +104,11 @@ export function createSessionHandlers(
       // Route based on session status
       const session = getSession(sessionId);
       if (session?.status === 'building' || session?.status === 'iterating') {
-        // Build or iteration is in progress — queue message as feedback for when it completes
+        // Build or iteration is in progress — save message, user must resend as @feedback after build
         console.log(
-          'A build is currently in progress. Your message will be treated as feedback when it completes.',
+          'A build is currently in progress. Your message has been saved.',
         );
-        console.log('Use @stop to cancel the current build first, or wait for it to finish.\n');
+        console.log('Use @feedback after the build completes to apply changes, or @stop to cancel.\n');
         addMessage(sessionId, 'user', text, { phase: 'feedback-pending' });
         return;
       }
@@ -206,11 +206,12 @@ export function createSessionHandlers(
       const currentSession = getSession(sessionId);
       if (currentSession?.status === 'building' || currentSession?.status === 'iterating') {
         const { isLogActive } = await import('../session/agent-log.js');
-        if (isLogActive(sessionId)) {
+        const { hasActiveProcesses: hasProcs } = await import('../lifecycle.js');
+        if (isLogActive(sessionId) || hasProcs(sessionId)) {
           console.log('A build is already in progress. Use @stop to cancel it first.');
           return;
         }
-        // Build is stale/interrupted — recover to planning so we can restart
+        // Build is truly stale — no log activity AND no running processes
         try {
           transition(sessionId, 'planning');
         } catch {
@@ -268,6 +269,16 @@ export function createSessionHandlers(
       if (session?.status === 'planning') {
         console.log('\nRefining plan with your feedback...\n');
         return handlers.onMessage(text);
+      }
+
+      // During building/iterating, save the feedback — user must resend after build completes
+      if (session?.status === 'building' || session?.status === 'iterating') {
+        console.log(
+          'A build is currently in progress. Your feedback has been saved.',
+        );
+        console.log('Use @feedback after the build completes to apply changes, or @stop to cancel.\n');
+        addMessage(sessionId, 'user', text, { phase: 'feedback-pending' });
+        return;
       }
 
       console.log('\nProcessing feedback...\n');

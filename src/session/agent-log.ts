@@ -51,7 +51,7 @@ export interface LogWatcher {
  * Check whether a session's log file has recent activity, indicating a build
  * is actively running (not a stale leftover from a crashed build).
  */
-export function isLogActive(sessionId: string, staleThresholdMs: number = 10_000): boolean {
+export function isLogActive(sessionId: string, staleThresholdMs: number = 60_000): boolean {
   const logPath = getLogPath(sessionId);
   if (!existsSync(logPath)) return false;
 

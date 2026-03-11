@@ -298,9 +298,9 @@ export function getHelpDisplay(sessionId?: string): string {
   lines.push('  @status     Show current task progress dashboard');
   lines.push('  @plan       Re-display the current plan');
 
-  // @feedback works during planning (refines the plan) and awaiting_feedback/building (iterates on built code)
+  // @feedback works during planning (refines the plan) and awaiting_feedback (iterates on built code)
   const fbNote =
-    status && !['planning', 'awaiting_feedback', 'building'].includes(status) ? na : '';
+    status && !['planning', 'awaiting_feedback'].includes(status) ? na : '';
   lines.push(
     `  @feedback   Give feedback (refines plan during planning, iterates after build)${fbNote}`,
   );
