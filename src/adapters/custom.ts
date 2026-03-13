@@ -188,9 +188,17 @@ export class CustomAdapter implements AgentAdapter {
           });
         }
       } else {
-        // For arg/file prompt modes, close stdin immediately to prevent agent from blocking on stdin read
+        // For arg/file prompt modes, close stdin unless interactive input is expected
         if (!opts.onInputNeeded) {
           proc.stdin.end();
+        } else {
+          proc.on('close', () => {
+            try {
+              if (!proc.stdin.destroyed) proc.stdin.end();
+            } catch {
+              /* already closed */
+            }
+          });
         }
       }
     });

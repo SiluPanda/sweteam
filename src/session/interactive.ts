@@ -324,6 +324,14 @@ export function createSessionHandlers(
       const session = getSession(sessionId);
       const status = session?.status ?? 'unknown';
 
+      // Don't clear the build log while a build or iteration is running
+      if (session?.status === 'building' || session?.status === 'iterating') {
+        console.log(
+          'A build is currently in progress. @ask is available after it completes, or use @stop to cancel.\n',
+        );
+        return;
+      }
+
       // Build task summary from DB
       const { getTasksForSession } = await import('../orchestrator/orchestrator.js');
       const sessionTasks = getTasksForSession(sessionId);
