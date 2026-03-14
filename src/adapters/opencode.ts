@@ -41,6 +41,7 @@ export class OpenCodeAdapter implements AgentAdapter {
       });
       trackProcess(proc, opts.sessionId);
 
+      const MAX_OUTPUT_SIZE = 10 * 1024 * 1024;
       let stdout = '';
       let stderr = '';
       let recentOutput = '';
@@ -48,12 +49,20 @@ export class OpenCodeAdapter implements AgentAdapter {
       let waitingForInput = false;
       let settled = false;
 
-      // Prevent EPIPE crashes
-      proc.stdin.on('error', () => {});
+      // Silence EPIPE but log other stdin errors
+      proc.stdin.on('error', (err: NodeJS.ErrnoException) => {
+        if (err.code !== 'EPIPE') {
+          console.error(`stdin error: ${err.message}`);
+        }
+      });
 
       proc.stdout.on('data', (chunk: Buffer) => {
         const text = chunk.toString();
-        stdout += text;
+        if (stdout.length + text.length > MAX_OUTPUT_SIZE) {
+          stdout = stdout.slice(stdout.length + text.length - MAX_OUTPUT_SIZE) + text;
+        } else {
+          stdout += text;
+        }
         if (opts.onOutput) {
           opts.onOutput(text);
         }
@@ -68,27 +77,32 @@ export class OpenCodeAdapter implements AgentAdapter {
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
           if (waitingForInput || settled) return;
-          if (detectInputPrompt(recentOutput)) {
+          const captured = recentOutput;
+          recentOutput = '';
+          if (detectInputPrompt(captured)) {
             waitingForInput = true;
-            const promptText = extractPromptText(recentOutput);
+            const promptText = extractPromptText(captured);
             opts.onInputNeeded!(promptText)
               .then((response) => {
                 waitingForInput = false;
                 if (response !== null && !proc.killed) {
                   proc.stdin.write(response + '\n');
                 }
-                recentOutput = '';
               })
               .catch(() => {
                 waitingForInput = false;
-                recentOutput = '';
               });
           }
         }, 2000);
       });
 
       proc.stderr.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString();
+        const errText = chunk.toString();
+        if (stderr.length + errText.length > MAX_OUTPUT_SIZE) {
+          stderr = stderr.slice(stderr.length + errText.length - MAX_OUTPUT_SIZE) + errText;
+        } else {
+          stderr += errText;
+        }
       });
 
       const timer =

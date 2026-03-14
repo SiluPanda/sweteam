@@ -35,8 +35,12 @@ export function clearLog(sessionId: string): void {
 }
 
 export function writeEvent(sessionId: string, event: Omit<AgentEvent, 'ts'>): void {
-  const line = JSON.stringify({ ...event, ts: Date.now() }) + '\n';
-  appendFileSync(getLogPath(sessionId), line);
+  try {
+    const line = JSON.stringify({ ...event, ts: Date.now() }) + '\n';
+    appendFileSync(getLogPath(sessionId), line);
+  } catch (err) {
+    console.error(`Warning: failed to write agent event for session ${sessionId}:`, err);
+  }
 }
 
 export interface LogWatcher {
@@ -94,7 +98,12 @@ export function watchLog(sessionId: string, onEvent: (event: AgentEvent) => void
       const lines = newContent.split('\n').filter(Boolean);
       for (const line of lines) {
         try {
-          onEvent(JSON.parse(line));
+          const parsed = JSON.parse(line);
+          try {
+            onEvent(parsed);
+          } catch (err) {
+            console.error('watchLog onEvent error:', err);
+          }
         } catch {
           // skip malformed lines
         }

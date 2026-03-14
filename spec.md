@@ -80,7 +80,7 @@ sweteam is a terminal-based orchestrator that turns a high-level coding goal int
 
 **Agent Adapter Layer** — Thin wrappers that normalize how sweteam invokes each CLI. Each adapter knows how to: invoke the CLI with a prompt, capture output, detect completion vs error, and let the CLI modify files in the working directory.
 
-**Reporter** — TUI dashboard showing real-time status of all tasks within the active session.
+**Reporter** — Streams real-time agent output during builds via the agent log and panel system. Users can attach/detach from live output using `@watch`.
 
 ---
 
@@ -192,9 +192,14 @@ export const iterations = sqliteTable('iterations', {
 @status                   Show current task progress dashboard
 @plan                     Re-display the current plan
 @feedback <text>          Give feedback on completed work (triggers new iteration)
+@watch                    Re-attach to live agent output
 @diff                     Show the current cumulative diff
 @pr                       Show the PR link
 @tasks                    List all tasks and their statuses
+@ask                      Ask the architect about the development process
+@cancel                   Cancel the current planner run (session stays active)
+@image <path>             Attach image file(s) to pass to the underlying CLI agent
+@images                   List attached images (@images clear to remove all)
 @stop                     Stop this session
 @help                     Show available commands
 ```
@@ -861,8 +866,8 @@ Respond with ONLY valid JSON — a plan delta:
 | Repo not found         | Error with: `repo {repo} not found on GitHub`                 |
 | Agent times out        | Retry once, then mark task failed                             |
 | Agent non-zero exit    | Capture stderr, retry with error context, then escalate       |
-| Review fails N times   | Mark task escalated, continue others                          |
-| Merge conflict         | Attempt auto-resolve via coder agent, escalate if still stuck |
+| Review fails N times   | Force-accept and merge, continue others                       |
+| Merge conflict         | Abort merge, mark task failed, continue others                |
 | All tasks escalated    | Move to `awaiting_feedback` with failure report               |
 | Dependency task failed | Downstream tasks → `blocked`                                  |
 
@@ -888,45 +893,62 @@ sweteam/
 ├── tsconfig.json
 ├── drizzle.config.ts
 ├── src/
-│   ├── index.ts                 # CLI entry point, command router
+│   ├── index.ts                 # CLI entry point (Commander.js)
+│   ├── lifecycle.ts             # Process tracking and shutdown
 │   ├── commands/
 │   │   ├── create.ts            # /create handler
 │   │   ├── enter.ts             # /enter handler
 │   │   ├── list.ts              # /list handler
+│   │   ├── show.ts              # /show handler
+│   │   ├── stop.ts              # /stop handler
 │   │   ├── delete.ts            # /delete handler
 │   │   └── init.ts              # auto-discovery + config gen
 │   ├── session/
 │   │   ├── manager.ts           # session CRUD, state transitions
-│   │   ├── chat.ts              # interactive chat loop (planning + feedback)
-│   │   └── state-machine.ts     # status transition validation
+│   │   ├── interactive.ts       # interactive chat loop (planning + feedback)
+│   │   ├── state-machine.ts     # status transition validation
+│   │   ├── agent-log.ts         # agent output log (JSONL-based streaming)
+│   │   └── in-session-commands.ts # @-command handlers
 │   ├── planner/
 │   │   ├── planner.ts           # plan generation + chat orchestration
 │   │   └── plan-parser.ts       # parse agent output into structured plan
 │   ├── orchestrator/
 │   │   ├── orchestrator.ts      # DAG walker, parallel task dispatch
 │   │   ├── task-runner.ts       # single task: branch → code → review → merge
-│   │   └── feedback-handler.ts  # process @feedback, generate plan delta
+│   │   ├── build-handler.ts     # full build pipeline orchestration
+│   │   ├── reviewer.ts          # review loop with force-accept fallback
+│   │   ├── feedback-handler.ts  # process @feedback, generate plan delta
+│   │   ├── dag.ts               # task dependency graph
+│   │   ├── parallel-runner.ts   # parallel task execution
+│   │   └── error-handling.ts    # error pattern matching + friendly messages
 │   ├── adapters/
 │   │   ├── adapter.ts           # AgentAdapter interface
 │   │   ├── claude-code.ts
 │   │   ├── codex.ts
 │   │   ├── opencode.ts
-│   │   └── custom.ts            # generic adapter from config
+│   │   ├── custom.ts            # generic adapter from config
+│   │   └── prompt-detection.ts  # detect prompt delivery method
 │   ├── git/
 │   │   └── git.ts               # raw git/gh CLI wrappers
 │   ├── db/
 │   │   ├── schema.ts            # Drizzle schema (sessions, messages, tasks, iterations)
-│   │   ├── client.ts            # SQLite connection + Drizzle instance
-│   │   └── migrations/          # Drizzle migrations
-│   ├── tui/
-│   │   ├── dashboard.ts         # Ink-based task progress dashboard
-│   │   ├── session-list.ts      # Ink-based session list
-│   │   └── chat-ui.ts           # Ink-based chat interface
-│   └── config/
-│       ├── loader.ts            # TOML config loader + CLI flag merging
-│       └── discovery.ts         # auto-detect installed CLIs
-├── db/
-│   └── schema.ts                # re-export for drizzle-kit
+│   │   └── client.ts            # SQLite connection + Drizzle instance
+│   ├── ui/
+│   │   ├── theme.ts             # color palette, icons, box-drawing, helpers
+│   │   ├── banner.ts            # startup banner
+│   │   ├── prompt.ts            # raw-mode input with autocomplete
+│   │   ├── agent-panel.ts       # live agent output display
+│   │   ├── sidebar.ts           # persistent session sidebar
+│   │   └── markdown.ts          # markdown rendering
+│   ├── repl/
+│   │   └── repl.ts              # interactive REPL loop
+│   ├── config/
+│   │   ├── loader.ts            # TOML config loader + CLI flag merging
+│   │   ├── discovery.ts         # auto-detect installed CLIs
+│   │   └── gh-auth.ts           # GitHub authentication helper
+│   ├── utils/
+│   │   └── time.ts              # time formatting utilities
+│   └── __tests__/               # test suite (Vitest)
 └── drizzle/
     └── migrations/              # generated migration files
 ```
@@ -940,12 +962,12 @@ sweteam/
 | Language      | TypeScript (Node.js)        | Same ecosystem as Claude Code, fast to iterate  |
 | ORM           | Drizzle                     | Type-safe, lightweight, great SQLite support    |
 | Database      | SQLite (via better-sqlite3) | Zero setup, local, perfect for CLI tool         |
-| TUI           | Ink (React for CLI)         | Rich interactive UIs, chat interfaces           |
+| TUI           | Custom (chalk, gradient-string, raw-mode prompt) | Lightweight, no framework overhead    |
 | Process mgmt  | `child_process` (native)    | No extra deps for spawning CLIs                 |
 | Git           | `git` CLI directly          | No abstraction layer, user's git config applies |
 | GitHub        | `gh` CLI directly           | Auth, PR creation, repo resolution              |
 | Config        | TOML via `@iarna/toml`      | Standard for dev tools                          |
-| CLI framework | Commander.js or yargs       | Command routing, flag parsing                   |
+| CLI framework | Commander.js                | Command routing, flag parsing                   |
 | IDs           | nanoid                      | Short, URL-safe, collision-resistant            |
 
 ---
@@ -971,12 +993,12 @@ sweteam/
 2. Plan delta generation + incremental builds
 3. Codex and OpenCode adapters
 4. Custom adapter support
-5. Merge conflict resolution
+5. ~~Merge conflict resolution~~ (descoped — merge failures mark task as failed)
 
 ### Phase 3 — Parallel + Polish
 
 1. DAG-based parallel execution
-2. Full Ink TUI dashboard
+2. ~~Full Ink TUI dashboard~~ (replaced by custom chalk-based UI)
 3. `@status`, `@diff`, `@tasks` commands
 4. Session search/filter
 5. Export session as markdown report

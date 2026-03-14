@@ -1,5 +1,5 @@
-import chalk from 'chalk';
 import { createInterface } from 'readline';
+import { c, icons, vLen } from './theme.js';
 
 /**
  * Interactive prompt with dropdown autocomplete and ghost-text.
@@ -63,17 +63,18 @@ export function promptLine(opts: PromptOptions): Promise<string> {
       clearDropdown();
 
       const width = usableWidth();
-      const promptLen = prompt.length;
+      const promptLen = vLen(prompt);
       const inputSpace = width - promptLen;
 
       // When input is longer than available space, show a sliding window around the cursor
+      const inputChars = Array.from(input);
       let visibleInput = input;
       let visibleCursor = cursor;
-      if (input.length > inputSpace) {
+      if (inputChars.length > inputSpace) {
         // Keep cursor roughly centered in the visible window
         let start = cursor - Math.floor(inputSpace / 2);
-        start = Math.max(0, Math.min(start, input.length - inputSpace));
-        visibleInput = input.slice(start, start + inputSpace);
+        start = Math.max(0, Math.min(start, inputChars.length - inputSpace));
+        visibleInput = inputChars.slice(start, start + inputSpace).join('');
         visibleCursor = cursor - start;
       }
 
@@ -86,7 +87,7 @@ export function promptLine(opts: PromptOptions): Promise<string> {
         const ghostRoom = width - promptLen - visibleInput.length;
         if (ghostRoom > 0) {
           const ghost = selected.slice(input.length, input.length + ghostRoom);
-          process.stdout.write(chalk.dim(ghost));
+          process.stdout.write(c.muted(ghost));
         }
       }
 
@@ -97,13 +98,13 @@ export function promptLine(opts: PromptOptions): Promise<string> {
           const item = suggestions[i];
           const truncItem = item.length > width - 3 ? item.slice(0, width - 6) + '…' : item;
           if (i === selectedIndex) {
-            process.stdout.write('\n' + chalk.bgBlue.white(` ${truncItem} `));
+            process.stdout.write('\n' + c.cyan(`${icons.arrow} `) + c.brightBold(truncItem));
           } else {
-            process.stdout.write('\n ' + chalk.dim(truncItem) + ' ');
+            process.stdout.write('\n  ' + c.subtle(truncItem));
           }
         }
         if (suggestions.length > maxVisible) {
-          process.stdout.write('\n ' + chalk.dim(`… ${suggestions.length - maxVisible} more`));
+          process.stdout.write('\n ' + c.muted(`… ${suggestions.length - maxVisible} more`));
           dropdownRows = maxVisible + 1;
         } else {
           dropdownRows = maxVisible;
@@ -237,7 +238,9 @@ export function promptLine(opts: PromptOptions): Promise<string> {
       // ── Backspace ──
       if (seq === '\x7f' || seq === '\b') {
         if (cursor > 0) {
-          input = input.slice(0, cursor - 1) + input.slice(cursor);
+          const chars = Array.from(input);
+          chars.splice(cursor - 1, 1);
+          input = chars.join('');
           cursor--;
           refreshSuggestions();
           render();
@@ -251,8 +254,11 @@ export function promptLine(opts: PromptOptions): Promise<string> {
       }
 
       // ── Printable characters (including paste) ──
-      for (const ch of seq) {
-        input = input.slice(0, cursor) + ch + input.slice(cursor);
+      // Use Array.from to correctly iterate over code points (handles surrogate pairs)
+      for (const ch of Array.from(seq)) {
+        const chars = Array.from(input);
+        chars.splice(cursor, 0, ch);
+        input = chars.join('');
         cursor++;
       }
       refreshSuggestions();
@@ -274,8 +280,14 @@ export function promptLine(opts: PromptOptions): Promise<string> {
     }
 
     process.stdin.setRawMode(true);
-    process.stdin.resume();
-    process.stdin.on('data', onData);
-    render();
+    try {
+      process.stdin.resume();
+      process.stdin.on('data', onData);
+      render();
+    } catch (err) {
+      // Ensure raw mode is disabled if setup throws
+      if (process.stdin.isTTY) process.stdin.setRawMode(false);
+      throw err;
+    }
   });
 }

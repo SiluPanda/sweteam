@@ -205,7 +205,7 @@ export async function invokeArchitect(
   const config = loadConfig();
   const adapter = resolveAdapter(config.roles.planner, config);
 
-  const chatHistory = getMessages(sessionId).map((m) => ({
+  const chatHistory = getMessages(sessionId, 50).map((m) => ({
     role: m.role,
     content: m.content,
   }));
@@ -242,7 +242,7 @@ export async function invokePlanner(
   const config = loadConfig();
   const adapter = resolveAdapter(config.roles.planner, config);
 
-  const chatHistory = getMessages(sessionId).map((m) => ({
+  const chatHistory = getMessages(sessionId, 50).map((m) => ({
     role: m.role,
     content: m.content,
   }));

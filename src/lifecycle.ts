@@ -1,4 +1,4 @@
-import type { ChildProcess } from 'child_process';
+import { type ChildProcess, execSync } from 'child_process';
 import { closeDb } from './db/client.js';
 
 /** Track spawned child processes for cleanup on shutdown. */
@@ -22,44 +22,60 @@ export function hasActiveProcesses(sessionId: string): boolean {
 export function killSessionProcesses(sessionId: string): void {
   for (const [proc, sid] of activeProcesses) {
     if (sid === sessionId) {
-      try {
-        proc.kill('SIGTERM');
-      } catch {
-        /* already exited */
-      }
+      killProcess(proc);
     }
   }
-  setTimeout(() => {
+  const timer = setTimeout(() => {
     for (const [proc, sid] of activeProcesses) {
       if (sid === sessionId) {
-        try {
-          proc.kill('SIGKILL');
-        } catch {
-          /* already dead */
-        }
+        forceKillProcess(proc);
       }
     }
   }, 2000);
+  timer.unref(); // Don't keep event loop alive for this
+}
+
+/** Send a graceful termination signal (platform-aware). */
+function killProcess(proc: ChildProcess): void {
+  try {
+    if (process.platform === 'win32') {
+      if (proc.pid) {
+        execSync(`taskkill /pid ${proc.pid} /T /F`, { stdio: 'ignore' });
+      }
+    } else {
+      proc.kill('SIGTERM');
+    }
+  } catch {
+    // Process may have already exited
+  }
+}
+
+/** Force-kill a process (platform-aware). */
+function forceKillProcess(proc: ChildProcess): void {
+  try {
+    if (process.platform === 'win32') {
+      if (proc.pid) {
+        execSync(`taskkill /pid ${proc.pid} /T /F`, { stdio: 'ignore' });
+      }
+    } else {
+      proc.kill('SIGKILL');
+    }
+  } catch {
+    // Already dead
+  }
 }
 
 export function killAllProcesses(): void {
   for (const proc of activeProcesses.keys()) {
-    try {
-      proc.kill('SIGTERM');
-    } catch {
-      // Process may have already exited
-    }
+    killProcess(proc);
   }
   // Give processes a moment, then force-kill any remaining
-  setTimeout(() => {
+  const timer = setTimeout(() => {
     for (const proc of activeProcesses.keys()) {
-      try {
-        proc.kill('SIGKILL');
-      } catch {
-        // Already dead
-      }
+      forceKillProcess(proc);
     }
   }, 2000);
+  timer.unref(); // Don't keep event loop alive for this
 }
 
 let shuttingDown = false;
@@ -83,12 +99,14 @@ function handleShutdown(signal: string): void {
   closeDb();
 
   // Delay must exceed the SIGKILL fallback (2000ms) to avoid orphaning processes
-  setTimeout(() => process.exit(0), 3000);
+  const exitTimer = setTimeout(() => process.exit(0), 3000);
+  exitTimer.unref(); // Don't keep event loop alive for this
 }
 
 export function installShutdownHandlers(): void {
   process.on('SIGINT', () => handleShutdown('SIGINT'));
   process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+  process.on('SIGHUP', () => handleShutdown('SIGHUP'));
 
   process.on('unhandledRejection', (reason) => {
     console.error('Unhandled promise rejection:', reason);

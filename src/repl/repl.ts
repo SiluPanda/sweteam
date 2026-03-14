@@ -13,6 +13,7 @@ import { AgentPanel } from '../ui/agent-panel.js';
 import { SessionSidebar } from '../ui/sidebar.js';
 import { friendlyError } from '../orchestrator/error-handling.js';
 import { hasActiveProcesses } from '../lifecycle.js';
+import { c, icons } from '../ui/theme.js';
 
 // ── Active session state ────────────────────────────────────────────
 
@@ -459,6 +460,14 @@ async function dispatch(command: string, args: string[]): Promise<void> {
 
 // ── Prompt string ───────────────────────────────────────────────────
 
+const PROMPT_STATE_COLORS: Record<string, (s: string) => string> = {
+  planning: c.info,
+  building: c.warning,
+  awaiting_feedback: c.success,
+  iterating: c.pink,
+  stopped: c.error,
+};
+
 const PROMPT_STATE_LABELS: Record<string, string> = {
   planning: 'planning',
   building: 'building',
@@ -475,14 +484,15 @@ function getPrompt(): string {
       const session = getSession(activeSession.id);
       if (session?.status) {
         const label = PROMPT_STATE_LABELS[session.status] ?? session.status;
-        stateTag = ` (${label})`;
+        const colorFn = PROMPT_STATE_COLORS[session.status] ?? c.subtle;
+        stateTag = c.muted('(') + colorFn(label) + c.muted(')');
       }
     } catch {
       // DB may be unavailable
     }
-    return `${short}${stateTag}> `;
+    return `${c.cyan(short)}${stateTag ? ' ' + stateTag : ''} ${c.primary(icons.arrow)} `;
   }
-  return 'sweteam> ';
+  return `${c.primaryBold('sweteam')} ${c.primary(icons.arrow)} `;
 }
 
 // ── Main loop ───────────────────────────────────────────────────────
@@ -516,6 +526,13 @@ export async function runRepl(opts?: ReplOptions): Promise<void> {
   // Start the persistent session sidebar
   sidebar.start();
 
+  // Recalculate layout on terminal resize
+  const resizeHandler = () => {
+    sidebar.invalidate();
+  };
+  process.stdout.on('resize', resizeHandler);
+
+  try {
   // Pre-activate session if provided
   if (opts?.initialSession) {
     const s = opts.initialSession;
@@ -654,6 +671,9 @@ export async function runRepl(opts?: ReplOptions): Promise<void> {
     }
   }
 
-  sidebar.stop();
+  } finally {
+    process.stdout.removeListener('resize', resizeHandler);
+    sidebar.stop();
+  }
   process.exit(0);
 }

@@ -3,13 +3,14 @@ import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { getDb, closeDb } from '../db/client.js';
-import { sessions } from '../db/schema.js';
+import { sessions, tasks as tasksTable } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import {
   buildFeedbackPrompt,
   parsePlanDelta,
   createIteration,
   getIterationHistory,
+  requeueIncompleteTasks,
 } from '../orchestrator/feedback-handler.js';
 import { createSessionHandlers } from '../session/interactive.js';
 
@@ -217,5 +218,110 @@ describe('feedback during planning — routes to planner', () => {
 
     // Verify it called handleFeedback (the iteration path), not the planner
     expect(fbSpy).toHaveBeenCalledWith('s_plan_fb', 'Fix the colors', undefined);
+  });
+});
+
+describe('requeueIncompleteTasks — re-queues stuck intermediate-state tasks', () => {
+  const tempDirs: string[] = [];
+  const SESSION_ID = 's_requeue';
+
+  beforeEach(() => {
+    const dir = mkdtempSync(join(tmpdir(), 'sweteam-requeue-'));
+    tempDirs.push(dir);
+    const db = getDb(join(dir, 'test.db'));
+
+    db.insert(sessions)
+      .values({
+        id: SESSION_ID,
+        repo: 'owner/repo',
+        goal: 'Test',
+        status: 'iterating',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .run();
+
+    // Insert tasks in various states
+    const now = new Date();
+    const statuses = ['done', 'queued', 'failed', 'blocked', 'running', 'reviewing', 'fixing'];
+    for (let i = 0; i < statuses.length; i++) {
+      db.insert(tasksTable)
+        .values({
+          id: `${SESSION_ID}:${i + 1}`,
+          sessionId: SESSION_ID,
+          title: `Task ${i + 1} (${statuses[i]})`,
+          description: `Task in ${statuses[i]} state`,
+          status: statuses[i],
+          order: i + 1,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+    }
+  });
+
+  afterEach(() => {
+    closeDb();
+    for (const dir of tempDirs) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+    tempDirs.length = 0;
+  });
+
+  it('should re-queue failed, blocked, running, reviewing, and fixing tasks', () => {
+    requeueIncompleteTasks(SESSION_ID);
+
+    const db = getDb();
+    const taskRows = db
+      .select({ id: tasksTable.id, status: tasksTable.status })
+      .from(tasksTable)
+      .where(eq(tasksTable.sessionId, SESSION_ID))
+      .orderBy(tasksTable.order)
+      .all();
+
+    const statusMap = Object.fromEntries(taskRows.map((t) => [t.id, t.status]));
+
+    // done and queued should be untouched
+    expect(statusMap[`${SESSION_ID}:1`]).toBe('done');
+    expect(statusMap[`${SESSION_ID}:2`]).toBe('queued');
+
+    // failed, blocked, running, reviewing, fixing should all be re-queued
+    expect(statusMap[`${SESSION_ID}:3`]).toBe('queued'); // was failed
+    expect(statusMap[`${SESSION_ID}:4`]).toBe('queued'); // was blocked
+    expect(statusMap[`${SESSION_ID}:5`]).toBe('queued'); // was running
+    expect(statusMap[`${SESSION_ID}:6`]).toBe('queued'); // was reviewing
+    expect(statusMap[`${SESSION_ID}:7`]).toBe('queued'); // was fixing
+  });
+
+  it('should clear review/branch metadata when re-queuing', () => {
+    // Set review metadata on a running task to verify it gets cleared
+    const db = getDb();
+    db.update(tasksTable)
+      .set({
+        reviewVerdict: 'request_changes',
+        reviewIssues: '[{"message":"stale"}]',
+        reviewCycles: 2,
+        diffPatch: 'old diff',
+        agentOutput: 'old output',
+        branchName: 'sw/old-branch',
+      })
+      .where(eq(tasksTable.id, `${SESSION_ID}:5`))
+      .run();
+
+    requeueIncompleteTasks(SESSION_ID);
+
+    const rows = db
+      .select()
+      .from(tasksTable)
+      .where(eq(tasksTable.id, `${SESSION_ID}:5`))
+      .all();
+
+    expect(rows[0].status).toBe('queued');
+    expect(rows[0].reviewVerdict).toBeNull();
+    expect(rows[0].reviewIssues).toBeNull();
+    expect(rows[0].reviewCycles).toBe(0);
+    expect(rows[0].diffPatch).toBeNull();
+    expect(rows[0].agentOutput).toBeNull();
+    expect(rows[0].branchName).toBeNull();
   });
 });

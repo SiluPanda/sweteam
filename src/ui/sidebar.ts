@@ -1,53 +1,24 @@
-import chalk from 'chalk';
 import { listSessionsEnriched, type EnrichedSession } from '../session/manager.js';
 import { isLogActive } from '../session/agent-log.js';
+import {
+  c,
+  border,
+  box,
+  icons,
+  progressBar,
+  divider,
+  vLen,
+  rPad,
+  vTrunc,
+} from './theme.js';
 
 // ── Constants ────────────────────────────────────────────────────────
 
-const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-const PULSE = ['◆', '◇'];
 const SIDEBAR_WIDTH = 28;
 const CACHE_TTL = 2000; // refresh session data every 2s
 const FRAME_MS = 200; // animation frame interval
 
 // ── Helpers ──────────────────────────────────────────────────────────
-
-function stripAnsi(s: string): string {
-  // eslint-disable-next-line no-control-regex
-  return s.replace(/\x1b\[[0-9;]*m/g, '');
-}
-
-function visLen(s: string): number {
-  return stripAnsi(s).length;
-}
-
-/** Pad string to `width` visible characters. */
-function pad(s: string, width: number): string {
-  return s + ' '.repeat(Math.max(0, width - visLen(s)));
-}
-
-/** Truncate to `max` visible characters, preserving ANSI. */
-function trunc(s: string, max: number): string {
-  let vis = 0;
-  let out = '';
-  let esc = false;
-  for (const ch of s) {
-    if (ch === '\x1b') {
-      esc = true;
-      out += ch;
-      continue;
-    }
-    if (esc) {
-      out += ch;
-      if (ch === 'm') esc = false;
-      continue;
-    }
-    if (vis >= max) break;
-    out += ch;
-    vis++;
-  }
-  return out;
-}
 
 function elapsed(date: Date): string {
   const sec = Math.floor((Date.now() - date.getTime()) / 1000);
@@ -147,46 +118,38 @@ export class SessionSidebar {
   // ── Status display ───────────────────────────────────────────────
 
   private icon(status: string, active: boolean): string {
-    const sp = SPINNER[this.frame % SPINNER.length];
+    const sp = icons.spinner[this.frame % icons.spinner.length];
     switch (status) {
       case 'planning':
-        return active ? chalk.blue(sp) : chalk.blue('●');
+        return active ? c.info(sp) : c.info('●');
       case 'building':
-        return active ? chalk.yellow(sp) : chalk.yellow('●');
+        return active ? c.warning(sp) : c.warning('●');
       case 'iterating':
-        return active ? chalk.magenta(sp) : chalk.magenta('●');
+        return active ? c.pink(sp) : c.pink('●');
       case 'awaiting_feedback':
-        return chalk.green(PULSE[this.frame % PULSE.length]);
+        return c.success(icons.pulse[this.frame % icons.pulse.length]);
       case 'stopped':
-        return chalk.red('■');
+        return c.error(icons.stopped);
       default:
-        return chalk.dim('○');
+        return c.dim('○');
     }
   }
 
   private label(status: string, active: boolean): string {
     switch (status) {
       case 'planning':
-        return active ? chalk.blue('planning…') : chalk.blue('planning');
+        return active ? c.info('planning…') : c.info('planning');
       case 'building':
-        return active ? chalk.yellow('building…') : chalk.yellow('building');
+        return active ? c.warning('building…') : c.warning('building');
       case 'iterating':
-        return active ? chalk.magenta('iterating…') : chalk.magenta('iterating');
+        return active ? c.pink('iterating…') : c.pink('iterating');
       case 'awaiting_feedback':
-        return chalk.green('needs feedback');
+        return c.success('needs feedback');
       case 'stopped':
-        return chalk.red('stopped');
+        return c.error('stopped');
       default:
-        return chalk.dim(status);
+        return c.dim(status);
     }
-  }
-
-  private progressBar(done: number, total: number, w: number): string {
-    if (total === 0) return '';
-    const filled = Math.round((done / total) * w);
-    return (
-      chalk.green('█'.repeat(filled)) + chalk.dim('░'.repeat(w - filled)) + ` ${done}/${total}`
-    );
   }
 
   // ── Build lines ──────────────────────────────────────────────────
@@ -196,54 +159,61 @@ export class SessionSidebar {
     const iw = this.iw;
     const lines: string[] = [];
 
+    // Top border
+    lines.push(border.dim(box.topLeft + box.horizontal.repeat(iw - 1) + box.topRight));
+
     // Header
-    lines.push(chalk.bold.cyan(' ⚡ Sessions'));
-    lines.push(chalk.dim(' ' + '─'.repeat(iw - 1)));
+    lines.push(c.primaryBold(` ${icons.building} Sessions`));
+    lines.push(divider(iw));
 
     if (sessions.length === 0) {
-      lines.push(chalk.dim(' (none)'));
+      lines.push(c.dim(' (none)'));
       lines.push('');
-      lines.push(chalk.dim(' /create to start'));
+      lines.push(c.muted(' /create to start'));
       return lines;
     }
 
-    for (const s of sessions) {
+    for (let i = 0; i < sessions.length; i++) {
+      const s = sessions[i];
       const logActive = isLogActive(s.id);
       const isCurrent = s.id === this.activeId;
-      const marker = isCurrent ? chalk.cyan('▸') : ' ';
+      const marker = isCurrent ? c.cyan(icons.pointer) : ' ';
       const ic = this.icon(s.status, logActive);
       const name = (s.repo.split('/').pop() ?? s.id).slice(0, iw - 8);
-      const time = chalk.dim(elapsed(s.updatedAt));
+      const time = c.dim(elapsed(s.updatedAt));
 
       // Row 1: marker icon name   elapsed
-      const nameStr = isCurrent ? chalk.bold(name) : name;
+      const nameStr = isCurrent ? c.brightBold(name) : name;
       const row1Left = `${marker}${ic} ${nameStr}`;
-      const row1LeftLen = visLen(row1Left);
-      const timeLen = visLen(time);
+      const row1LeftLen = vLen(row1Left);
+      const timeLen = vLen(time);
       const gap = Math.max(1, iw - row1LeftLen - timeLen);
-      lines.push(trunc(row1Left + ' '.repeat(gap) + time, iw));
+      lines.push(vTrunc(row1Left + ' '.repeat(gap) + time, iw));
 
       // Row 2: status label
-      lines.push(trunc(`   ${this.label(s.status, logActive)}`, iw));
+      lines.push(vTrunc(`   ${this.label(s.status, logActive)}`, iw));
 
       // Row 3: progress bar (if building/iterating with tasks)
       if ((s.status === 'building' || s.status === 'iterating') && s.tasksTotal > 0) {
         const barW = Math.min(8, iw - 12);
-        lines.push(trunc(`   ${this.progressBar(s.tasksDone, s.tasksTotal, barW)}`, iw));
+        lines.push(vTrunc(`   ${progressBar(s.tasksDone, s.tasksTotal, barW)}`, iw));
       }
 
       // Row 4: goal (truncated)
       if (s.goal) {
-        lines.push(trunc(`   ${chalk.dim(s.goal)}`, iw));
+        lines.push(vTrunc(`   ${c.dim(s.goal)}`, iw));
       }
 
-      lines.push(''); // spacer
+      // Separator between sessions (dot separator instead of empty spacer)
+      if (i < sessions.length - 1) {
+        lines.push(c.muted(` ${icons.dot.repeat(3)}`));
+      }
     }
 
     // Footer
-    lines.push(chalk.dim(' ' + '─'.repeat(iw - 1)));
+    lines.push(divider(iw));
     const n = sessions.length;
-    lines.push(chalk.dim(` ${n} session${n !== 1 ? 's' : ''}`));
+    lines.push(c.muted(` ${n} session${n !== 1 ? 's' : ''}`));
 
     return lines;
   }
@@ -262,7 +232,7 @@ export class SessionSidebar {
 
     const startCol = cols - SIDEBAR_WIDTH + 1;
     const lines = this.buildLines();
-    const border = chalk.dim('│');
+    const borderChar = border.dim(box.vertical);
 
     // Begin synchronized output (prevents tearing in supported terminals)
     let buf = '\x1b[?2026h\x1b7'; // sync on + save cursor
@@ -270,10 +240,10 @@ export class SessionSidebar {
     for (let row = 1; row <= rows; row++) {
       buf += `\x1b[${row};${startCol}H`; // move to position
       if (row <= lines.length) {
-        const content = pad(lines[row - 1], this.iw);
-        buf += `${border}${content} `;
+        const content = rPad(lines[row - 1], this.iw);
+        buf += `${borderChar}${content} `;
       } else {
-        buf += `${border}${' '.repeat(this.iw)} `;
+        buf += `${borderChar}${' '.repeat(this.iw)} `;
       }
     }
 

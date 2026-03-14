@@ -5,6 +5,7 @@ import { git, getDefaultBranch } from '../git/git.js';
 import { displayTaskId } from '../orchestrator/orchestrator.js';
 import { getPlannerState } from './interactive.js';
 import { hasActiveProcesses } from '../lifecycle.js';
+import { c, box, icons, progressBar, statusBadge, divider } from '../ui/theme.js';
 
 // Human-readable labels for session statuses
 const STATE_LABELS: Record<string, string> = {
@@ -25,6 +26,46 @@ function formatDuration(ms: number): string {
   return `${minutes}m ${seconds}s`;
 }
 
+/** Return a themed task icon based on task status. */
+function taskIcon(status: string): string {
+  switch (status) {
+    case 'done':
+      return c.success(icons.taskDone);
+    case 'running':
+      return c.info(icons.taskRunning);
+    case 'reviewing':
+      return c.warning(icons.taskReviewing);
+    case 'fixing':
+      return c.orange(icons.taskFixing);
+    case 'failed':
+      return c.error(icons.taskFailed);
+    case 'blocked':
+      return c.muted(icons.taskBlocked);
+    default:
+      return c.dim(icons.taskQueued);
+  }
+}
+
+/** Return a colored status text for brackets display. */
+function coloredStatus(status: string): string {
+  switch (status) {
+    case 'done':
+      return c.success(status);
+    case 'running':
+      return c.info(status);
+    case 'reviewing':
+      return c.warning(status);
+    case 'fixing':
+      return c.orange(status);
+    case 'failed':
+      return c.error(status);
+    case 'blocked':
+      return c.muted(status);
+    default:
+      return c.dim(status);
+  }
+}
+
 // @status — Task progress with summary
 export function getStatusDisplay(sessionId: string): string {
   const db = getDb();
@@ -40,10 +81,9 @@ export function getStatusDisplay(sessionId: string): string {
   let hasPlan = false;
   if (sessionRows.length > 0) {
     const s = sessionRows[0];
-    const label = STATE_LABELS[s.status as string] ?? s.status;
-    headerLines.push(`Session: ${label}`);
+    headerLines.push(c.brightBold('Session: ') + statusBadge(s.status as string));
     if (s.goal) {
-      headerLines.push(`Goal:    ${s.goal}`);
+      headerLines.push(c.subtle('Goal:') + ' ' + c.text(s.goal));
     }
     headerLines.push('');
     hasPlan = s.planJson != null;
@@ -62,7 +102,7 @@ export function getStatusDisplay(sessionId: string): string {
 
   if (taskRows.length === 0) {
     if (hasPlan) {
-      return headerLines.join('\n') + 'Plan ready. Type @build to start autonomous coding.';
+      return headerLines.join('\n') + c.info('Plan ready.') + ' ' + c.text('Type ') + c.cyan('@build') + c.text(' to start autonomous coding.');
     }
 
     // Enrich status during active planning
@@ -73,30 +113,30 @@ export function getStatusDisplay(sessionId: string): string {
       const processAlive = hasActiveProcesses(sessionId);
 
       const lines = [...headerLines];
-      lines.push(`Planner: running for ${elapsedStr}`);
+      lines.push(c.info('Planner:') + ' ' + c.text(`running for ${elapsedStr}`));
 
       if (plannerState.lastActivityAt) {
         const sinceActivity = Date.now() - plannerState.lastActivityAt;
         if (sinceActivity > 60_000) {
-          lines.push(`  ⚠ No output for ${formatDuration(sinceActivity)}`);
+          lines.push(`  ${c.warning(icons.warning)} ${c.warning(`No output for ${formatDuration(sinceActivity)}`)}`);
           if (!processAlive) {
             lines.push(
-              '  ⚠ Planner process may have crashed. Try @cancel then resend your message.',
+              `  ${c.warning(icons.warning)} ${c.error('Planner process may have crashed.')} ${c.text('Try')} ${c.cyan('@cancel')} ${c.text('then resend your message.')}`,
             );
           } else {
-            lines.push('  Process is alive — agent may be thinking.');
+            lines.push(`  ${c.text('Process is alive — agent may be thinking.')}`);
           }
         } else {
-          lines.push('  Receiving output...');
+          lines.push(`  ${c.success('Receiving output...')}`);
         }
       }
 
       lines.push('');
-      lines.push('Hint: @cancel to abort planning, or wait for it to finish.');
+      lines.push(c.dim('Hint:') + ' ' + c.cyan('@cancel') + c.text(' to abort planning, or wait for it to finish.'));
       return lines.join('\n');
     }
 
-    return headerLines.join('\n') + 'No plan yet. Describe your goal to start planning.';
+    return headerLines.join('\n') + c.text('No plan yet. Describe your goal to start planning.');
   }
 
   const counts = {
@@ -109,49 +149,30 @@ export function getStatusDisplay(sessionId: string): string {
     blocked: 0,
   };
 
-  const lines: string[] = [...headerLines, 'Task Status:'];
+  const lines: string[] = [...headerLines, c.primaryBold('Task Status:')];
 
-  for (const task of taskRows) {
+  for (let i = 0; i < taskRows.length; i++) {
+    const task = taskRows[i];
     const status = task.status as keyof typeof counts;
     if (status in counts) counts[status]++;
 
-    let icon: string;
-    switch (task.status) {
-      case 'done':
-        icon = '✓';
-        break;
-      case 'running':
-        icon = '▶';
-        break;
-      case 'reviewing':
-        icon = '⟳';
-        break;
-      case 'fixing':
-        icon = '🔧';
-        break;
-      case 'failed':
-        icon = '✗';
-        break;
-      case 'blocked':
-        icon = '⊘';
-        break;
-      default:
-        icon = '○';
-    }
-    lines.push(`  ${icon} ${displayTaskId(task.id)}  ${task.title}  [${task.status}]`);
+    const isLast = i === taskRows.length - 1;
+    const connector = isLast ? box.treeLast : box.treeBranch;
+    const icon = taskIcon(task.status as string);
+    lines.push(`  ${c.dim(connector)} ${icon} ${c.cyan(displayTaskId(task.id))}  ${c.text(task.title)}  [${coloredStatus(task.status as string)}]`);
   }
 
   const total = taskRows.length;
   const doneCount = counts.done;
   const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
-  const bar = '█'.repeat(Math.floor(pct / 5)) + '░'.repeat(20 - Math.floor(pct / 5));
+  const bar = progressBar(doneCount, total, 20);
 
   const active = counts.running + counts.reviewing + counts.fixing;
 
   lines.push('');
-  lines.push(`Progress: [${bar}] ${pct}% (${doneCount}/${total})`);
+  lines.push(`${c.subtle('Progress:')} ${bar} ${c.brightBold(`${pct}%`)}`);
   lines.push(
-    `  Queued: ${counts.queued} | Running: ${active} | Done: ${counts.done} | Failed: ${counts.failed} | Blocked: ${counts.blocked}`,
+    `  ${c.dim('Queued:')} ${c.text(String(counts.queued))} ${c.dim('|')} ${c.info('Running:')} ${c.text(String(active))} ${c.dim('|')} ${c.success('Done:')} ${c.text(String(counts.done))} ${c.dim('|')} ${c.error('Failed:')} ${c.text(String(counts.failed))} ${c.dim('|')} ${c.muted('Blocked:')} ${c.text(String(counts.blocked))}`,
   );
 
   return lines.join('\n');
@@ -167,17 +188,17 @@ export function getPlanDisplay(sessionId: string): string {
     .all();
 
   if (rows.length === 0 || !rows[0].planJson) {
-    return 'No plan finalized yet.';
+    return c.dim('No plan finalized yet.');
   }
 
   try {
     const plan = JSON.parse(rows[0].planJson);
     if (plan.tasks && Array.isArray(plan.tasks)) {
-      const lines = ['Current Plan:', ''];
+      const lines = [c.primaryBold('Current Plan:'), ''];
       for (const task of plan.tasks) {
-        lines.push(`  ${task.id}: ${task.title}`);
+        lines.push(`  ${c.cyan(task.id)}: ${c.text(task.title)}`);
         if (task.description) {
-          lines.push(`    ${task.description}`);
+          lines.push(`    ${c.subtle(task.description)}`);
         }
       }
       return lines.join('\n');
@@ -229,7 +250,8 @@ export function getPrDisplay(sessionId: string): string {
     return 'No PR created yet.';
   }
 
-  return `PR #${rows[0].prNumber}: ${rows[0].prUrl}`;
+  const prLabel = rows[0].prNumber ? `PR #${rows[0].prNumber}:` : 'PR:';
+  return `${prLabel} ${rows[0].prUrl}`;
 }
 
 // @tasks — Detailed task list
@@ -249,15 +271,19 @@ export function getTasksDisplay(sessionId: string): string {
     .all();
 
   if (taskRows.length === 0) {
-    return 'No tasks defined.';
+    return c.dim('No tasks defined.');
   }
 
-  const lines = ['Tasks:'];
-  for (const task of taskRows) {
+  const lines = [c.primaryBold('Tasks:')];
+  for (let i = 0; i < taskRows.length; i++) {
+    const task = taskRows[i];
+    const isLast = i === taskRows.length - 1;
+    const connector = isLast ? box.treeLast : box.treeBranch;
+    const icon = taskIcon(task.status as string);
     const review = task.reviewVerdict
-      ? ` (review: ${task.reviewVerdict}, cycles: ${task.reviewCycles})`
+      ? c.subtle(` (review: ${task.reviewVerdict}, cycles: ${task.reviewCycles})`)
       : '';
-    lines.push(`  ${displayTaskId(task.id)}: ${task.title} [${task.status}]${review}`);
+    lines.push(`  ${c.dim(connector)} ${icon} ${c.cyan(displayTaskId(task.id))}: ${c.text(task.title)} [${coloredStatus(task.status as string)}]${review}`);
   }
 
   return lines.join('\n');
@@ -279,48 +305,51 @@ export function getHelpDisplay(sessionId?: string): string {
     }
   }
 
-  const na = ' (not applicable now)';
+  const na = c.dim(' (not applicable now)');
 
   const lines: string[] = [];
 
   if (status) {
-    lines.push(`Session state: ${STATE_LABELS[status] ?? status}`);
+    lines.push(c.subtle('Session state:') + ' ' + statusBadge(status));
     lines.push('');
   }
 
-  lines.push('Session commands (@ prefix):');
+  lines.push(c.primaryBold('Session commands') + c.subtle(' (@ prefix):'));
   lines.push('');
 
   // @build only relevant during planning
   const buildNote = status && status !== 'planning' ? na : '';
-  lines.push(`  @build      Finalize plan and start autonomous coding${buildNote}`);
+  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@build')}      ${c.subtle('Finalize plan and start autonomous coding')}${buildNote}`);
 
-  lines.push('  @status     Show current task progress dashboard');
-  lines.push('  @plan       Re-display the current plan');
+  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@status')}     ${c.subtle('Show current task progress dashboard')}`);
+  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@plan')}       ${c.subtle('Re-display the current plan')}`);
 
   // @feedback works during planning (refines the plan) and awaiting_feedback (iterates on built code)
   const fbNote =
     status && !['planning', 'awaiting_feedback'].includes(status) ? na : '';
   lines.push(
-    `  @feedback   Give feedback (refines plan during planning, iterates after build)${fbNote}`,
+    `  ${c.dim(icons.pointer)} ${c.cyan('@feedback')}   ${c.subtle('Give feedback (refines plan during planning, iterates after build)')}${fbNote}`,
   );
 
-  lines.push('  @watch      Re-attach to live agent output');
-  lines.push('  @diff       Show the current cumulative diff');
-  lines.push('  @pr         Show the PR link');
-  lines.push('  @tasks      List all tasks and their statuses');
-  lines.push('  @ask        Ask the architect about the development process');
+  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@watch')}      ${c.subtle('Re-attach to live agent output')}`);
+  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@diff')}       ${c.subtle('Show the current cumulative diff')}`);
+  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@pr')}         ${c.subtle('Show the PR link')}`);
+  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@tasks')}      ${c.subtle('List all tasks and their statuses')}`);
+  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@ask')}        ${c.subtle('Ask the architect about the development process')}`);
   // @cancel only relevant during planning
   const cancelNote = status && status !== 'planning' ? na : '';
-  lines.push(`  @cancel     Cancel the current planner run (session stays active)${cancelNote}`);
-  lines.push('  @image      Attach image file(s) to pass to the underlying CLI agent');
-  lines.push('  @images     List attached images (@images clear to remove all)');
-  lines.push('  @stop       Stop this session');
-  lines.push('  @help       Show this help message');
+  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@cancel')}     ${c.subtle('Cancel the current planner run (session stays active)')}${cancelNote}`);
+  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@image')}      ${c.subtle('Attach image file(s) to pass to the underlying CLI agent')}`);
+  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@images')}     ${c.subtle('List attached images (@images clear to remove all)')}`);
+  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@stop')}       ${c.subtle('Stop this session')}`);
+  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@help')}       ${c.subtle('Show this help message')}`);
+
   lines.push('');
-  lines.push('  Escape      Leave session (back to sweteam>)');
+  lines.push(divider(50));
   lines.push('');
-  lines.push('Any other text is sent to the planner.');
+  lines.push(`  ${c.muted('Escape')}      ${c.dim('Leave session (back to sweteam>)')}`);
+  lines.push('');
+  lines.push(c.dim('Any other text is sent to the planner.'));
 
   return lines.join('\n');
 }

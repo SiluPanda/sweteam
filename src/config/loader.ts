@@ -55,6 +55,7 @@ const DEFAULT_CONFIG: SweteamConfig = {
 
 /** CLI overrides passed from command-line flags. */
 export interface ConfigOverrides {
+  planner?: string;
   coder?: string;
   reviewer?: string;
   parallel?: number;
@@ -89,6 +90,14 @@ export function loadConfig(configPath?: string): SweteamConfig {
       throw new Error(`Failed to parse config at ${effectivePath}: ${msg}`, { cause: err });
     }
 
+    // Warn about unknown top-level config keys
+    const knownKeys = new Set(['agents', 'roles', 'execution', 'git']);
+    for (const key of Object.keys(parsed)) {
+      if (!knownKeys.has(key)) {
+        console.warn(`Warning: unknown config key "${key}" in ${effectivePath} — did you mean one of: ${[...knownKeys].join(', ')}?`);
+      }
+    }
+
     config = {
       roles: { ...DEFAULT_CONFIG.roles, ...parsed.roles },
       execution: { ...DEFAULT_CONFIG.execution, ...parsed.execution },
@@ -98,10 +107,20 @@ export function loadConfig(configPath?: string): SweteamConfig {
   }
 
   // Apply CLI overrides
+  if (_overrides.planner) config.roles.planner = _overrides.planner;
   if (_overrides.coder) config.roles.coder = _overrides.coder;
   if (_overrides.reviewer) config.roles.reviewer = _overrides.reviewer;
   if (_overrides.parallel && _overrides.parallel > 0) {
     config.execution.max_parallel = _overrides.parallel;
+  }
+
+  // Validate that role agent names reference defined agents
+  const roles = ['planner', 'coder', 'reviewer'] as const;
+  for (const role of roles) {
+    const agentName = config.roles[role];
+    if (agentName && !config.agents[agentName]) {
+      throw new Error(`Config error: role "${role}" references agent "${agentName}" which is not defined in [agents] section`);
+    }
   }
 
   return config;

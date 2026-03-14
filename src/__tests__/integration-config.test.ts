@@ -36,6 +36,10 @@ reviewer = "codex"
 
 [execution]
 max_parallel = 5
+
+[agents.codex]
+command = "codex"
+args = ["-q"]
 `,
     );
     const config = loadConfig(configPath);
@@ -54,6 +58,13 @@ max_parallel = 5
 [roles]
 coder = "codex"
 reviewer = "codex"
+
+[agents.codex]
+command = "codex"
+args = ["-q"]
+
+[agents.opencode]
+command = "opencode"
 `,
     );
 
@@ -69,12 +80,23 @@ reviewer = "codex"
   });
 
   it('should apply CLI overrides over defaults', () => {
+    // Write a config with the codex agent defined so validation passes
+    const configPath = join(tmpDir, 'config.toml');
+    writeFileSync(
+      configPath,
+      `
+[agents.codex]
+command = "codex"
+args = ["-q"]
+`,
+    );
+
     setConfigOverrides({
       reviewer: 'codex',
       parallel: 1,
     });
 
-    const config = loadConfig(join(tmpDir, 'nonexistent.toml'));
+    const config = loadConfig(configPath);
     expect(config.roles.reviewer).toBe('codex');
     expect(config.execution.max_parallel).toBe(1);
   });

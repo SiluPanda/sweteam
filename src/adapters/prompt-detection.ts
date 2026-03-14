@@ -25,6 +25,9 @@ const FALSE_POSITIVE_PATTERNS = [
   /^\s*-\s/m, // bulleted list
   /[{}[\],;]/, // JSON/code syntax
   /^\s{4,}/, // indented code (4+ spaces)
+  /[)\]}>]\s*\?\s*$/, // closing bracket/paren before ? (code pattern)
+  /\w+\(\)\s*\?\s*$/, // function call ending with ?
+  /[:=]\s*\w+\s*\?\s*$/, // ternary/type annotation with ?
 ];
 
 /**
@@ -34,6 +37,10 @@ const FALSE_POSITIVE_PATTERNS = [
 export function detectInputPrompt(recentOutput: string): boolean {
   const trimmed = recentOutput.trimEnd();
   if (!trimmed) return false;
+
+  // Reject binary output — control chars (< 0x20) other than \n \r \t indicate binary data
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x08\x0e-\x1f]/.test(trimmed)) return false;
 
   // Get the last line
   const lines = trimmed.split('\n');

@@ -4,6 +4,17 @@ import { tasks as tasksTable, iterations } from '../db/schema.js';
 import { getSession, getMessages } from '../session/manager.js';
 import { relativeTime, formatDuration } from '../utils/time.js';
 import { displayTaskId } from '../orchestrator/orchestrator.js';
+import {
+  c,
+  border,
+  box,
+  icons,
+  progressBar,
+  doubleDivider,
+  rPad,
+  vLen,
+  vTrunc,
+} from '../ui/theme.js';
 
 export interface DetailedSessionView {
   id: string;
@@ -93,84 +104,107 @@ export function buildDetailedView(sessionId: string): DetailedSessionView | null
 function taskIcon(status: string): string {
   switch (status) {
     case 'done':
-      return '✓';
+      return c.success(icons.taskDone);
     case 'running':
-      return '▶';
+      return c.info(icons.taskRunning);
     case 'reviewing':
-      return '⟳';
+      return c.warning(icons.taskReviewing);
     case 'fixing':
-      return '🔧';
+      return c.orange(icons.taskFixing);
     case 'failed':
-      return '✗';
+      return c.error(icons.taskFailed);
     case 'blocked':
-      return '⊘';
+      return c.muted(icons.taskBlocked);
     default:
-      return '○';
+      return c.dim(icons.taskQueued);
   }
 }
 
+const BOX_WIDTH = 62;
+
 export function formatDetailedView(view: DetailedSessionView): string {
   const lines: string[] = [];
+  const bdr = border.primary;
+  const innerW = BOX_WIDTH - 2; // inside the vertical bars
 
-  lines.push('┌─────────────────────────────────────────────────────────────┐');
-  lines.push(`│  Session: ${view.id}`);
-  lines.push('├─────────────────────────────────────────────────────────────┤');
+  const row = (content: string) => bdr(box.vertical) + '  ' + rPad(content, innerW - 2) + bdr(box.vertical);
+  const emptyRow = () => bdr(box.vertical) + ' '.repeat(innerW) + bdr(box.vertical);
+  const teeRow = (content: string) =>
+    bdr(box.teeLeft) + rPad(content, innerW) + bdr(box.teeRight);
 
-  lines.push(`│  Repo:     ${view.repo}`);
-  lines.push(`│  Goal:     ${view.goal}`);
-  lines.push(`│  Status:   ${view.status}`);
-  lines.push(`│  Branch:   ${view.workingBranch ?? '(none)'}`);
+  // Top border
+  lines.push(bdr(box.topLeft + box.horizontal.repeat(innerW) + box.topRight));
+
+  // Session header
+  lines.push(row(c.subtle('Session: ') + c.info(view.id)));
+
+  // Divider
+  lines.push(bdr(box.teeLeft + box.horizontal.repeat(innerW) + box.teeRight));
+
+  // Session details
+  lines.push(row(c.subtle('Repo:     ') + c.text(view.repo)));
+  lines.push(row(c.subtle('Goal:     ') + c.text(view.goal)));
+  lines.push(row(c.subtle('Status:   ') + c.text(view.status)));
+  lines.push(row(c.subtle('Branch:   ') + c.text(view.workingBranch ?? '(none)')));
   if (view.prUrl) {
-    lines.push(`│  PR:       #${view.prNumber} ${view.prUrl}`);
+    lines.push(row(c.subtle('PR:       ') + c.text(`#${view.prNumber} ${view.prUrl}`)));
   }
-  lines.push(`│  Plan:     ${view.planReady ? 'ready' : 'not finalized'}`);
+  lines.push(row(c.subtle('Plan:     ') + c.text(view.planReady ? 'ready' : 'not finalized')));
 
-  lines.push('│');
-  lines.push(`│  Created:  ${view.createdAt.toISOString()} (${relativeTime(view.createdAt)})`);
-  lines.push(`│  Updated:  ${view.updatedAt.toISOString()} (${relativeTime(view.updatedAt)})`);
+  lines.push(emptyRow());
+  lines.push(row(c.subtle('Created:  ') + c.text(`${view.createdAt.toISOString()} (${relativeTime(view.createdAt)})`)));
+  lines.push(row(c.subtle('Updated:  ') + c.text(`${view.updatedAt.toISOString()} (${relativeTime(view.updatedAt)})`)));
   const endTime = view.stoppedAt ?? view.updatedAt;
-  lines.push(`│  Elapsed:  ${formatDuration(view.createdAt, endTime)}`);
+  lines.push(row(c.subtle('Elapsed:  ') + c.text(formatDuration(view.createdAt, endTime))));
   if (view.stoppedAt) {
-    lines.push(`│  Stopped:  ${view.stoppedAt.toISOString()}`);
+    lines.push(row(c.subtle('Stopped:  ') + c.text(view.stoppedAt.toISOString())));
   }
   if (view.iterationCount > 0) {
-    lines.push(`│  Feedback iterations: ${view.iterationCount}`);
+    lines.push(row(c.subtle('Feedback iterations: ') + c.text(String(view.iterationCount))));
   }
 
+  // Tasks section
   if (view.tasks.length > 0) {
-    lines.push('│');
-    lines.push('├─ Tasks ─────────────────────────────────────────────────────┤');
+    lines.push(emptyRow());
+    lines.push(teeRow(doubleDivider(innerW, 'Tasks')));
 
-    const pct = view.tasksTotal > 0 ? Math.round((view.tasksDone / view.tasksTotal) * 100) : 0;
-    const filled = Math.floor(pct / 5);
-    const bar = '█'.repeat(filled) + '░'.repeat(20 - filled);
-    lines.push(`│  Progress: [${bar}] ${pct}% (${view.tasksDone}/${view.tasksTotal})`);
-    lines.push('│');
+    // Progress bar
+    lines.push(row(c.subtle('Progress: ') + progressBar(view.tasksDone, view.tasksTotal, 20)));
+    lines.push(emptyRow());
 
-    for (const task of view.tasks) {
+    // Task list with tree connectors
+    for (let i = 0; i < view.tasks.length; i++) {
+      const task = view.tasks[i];
       const icon = taskIcon(task.status);
+      const connector = i < view.tasks.length - 1
+        ? c.dim(box.treeBranch)
+        : c.dim(box.treeLast);
       const review = task.reviewVerdict
-        ? ` (review: ${task.reviewVerdict}, cycles: ${task.reviewCycles})`
+        ? c.muted(` (review: ${task.reviewVerdict}, cycles: ${task.reviewCycles})`)
         : '';
-      lines.push(`│  ${icon} ${displayTaskId(task.id)}: ${task.title} [${task.status}]${review}`);
+      lines.push(row(
+        `${connector} ${icon} ${c.text(displayTaskId(task.id))}: ${c.text(task.title)} ${c.dim(`[${task.status}]`)}${review}`,
+      ));
     }
   } else {
-    lines.push('│');
-    lines.push('│  No tasks yet. Finalize the plan and type @build.');
+    lines.push(emptyRow());
+    lines.push(row(c.muted('No tasks yet. Finalize the plan and type @build.')));
   }
 
+  // Recent activity section
   if (view.recentMessages.length > 0) {
-    lines.push('│');
-    lines.push('├─ Recent Activity ───────────────────────────────────────────┤');
+    lines.push(emptyRow());
+    lines.push(teeRow(doubleDivider(innerW, 'Recent Activity')));
     for (const msg of view.recentMessages.slice(-5)) {
-      const prefix = `[${msg.role}]`;
-      const when = msg.createdAt ? relativeTime(msg.createdAt) : '';
-      const truncated = msg.content.length > 60 ? msg.content.slice(0, 57) + '...' : msg.content;
-      lines.push(`│  ${when.padEnd(10)} ${prefix.padEnd(10)} ${truncated}`);
+      const when = msg.createdAt ? c.muted(relativeTime(msg.createdAt).padEnd(10)) : c.muted(' '.repeat(10));
+      const prefix = c.info(`[${msg.role}]`.padEnd(10));
+      const truncated = vLen(msg.content) > 60 ? vTrunc(msg.content, 57) + '...' : msg.content;
+      lines.push(row(`${when} ${prefix} ${c.text(truncated)}`));
     }
   }
 
-  lines.push('└─────────────────────────────────────────────────────────────┘');
+  // Bottom border
+  lines.push(bdr(box.bottomLeft + box.horizontal.repeat(innerW) + box.bottomRight));
   return lines.join('\n');
 }
 

@@ -5,6 +5,7 @@ import { squashMerge, git } from '../git/git.js';
 import { resolveAdapter } from '../adapters/adapter.js';
 import { loadConfig } from '../config/loader.js';
 import { displayTaskId } from './orchestrator.js';
+import { safeJsonParse } from './dag.js';
 import type { TaskRecord } from './task-runner.js';
 
 export interface ReviewResult {
@@ -20,9 +21,9 @@ export interface ReviewResult {
 
 export function buildReviewerPrompt(task: TaskRecord, diff: string): string {
   const criteria = task.acceptanceCriteria
-    ? JSON.parse(task.acceptanceCriteria)
+    ? safeJsonParse<string[]>(task.acceptanceCriteria, [])
         .map((c: string) => `- ${c}`)
-        .join('\n')
+        .join('\n') || '(none specified)'
     : '(none specified)';
 
   return `You are a senior code reviewer. Review this diff for:
@@ -140,7 +141,13 @@ export async function reviewAndMerge(
   const taskCwd = options?.taskCwd ?? repoPath;
   const lock = options?.withMergeLock ?? (async <T>(fn: () => Promise<T>) => fn());
 
-  for (let cycle = 0; cycle < maxCycles; cycle++) {
+  // Validate max_review_cycles — must be at least 1 to avoid auto-merging without review
+  const effectiveMaxCycles = maxCycles >= 1 ? maxCycles : (() => {
+    console.log(`[warn] max_review_cycles is ${maxCycles}, defaulting to 1`);
+    return 1;
+  })();
+
+  for (let cycle = 0; cycle < effectiveMaxCycles; cycle++) {
     // Always get a fresh diff for this review cycle
     const diff = git(['diff', `${sessionBranch}...${task.branchName}`], repoPath);
 
@@ -189,7 +196,7 @@ export async function reviewAndMerge(
     }
 
     // Request changes — feed issues back to coder
-    if (cycle < maxCycles - 1) {
+    if (cycle < effectiveMaxCycles - 1) {
       db.update(tasks)
         .set({ status: 'fixing', updatedAt: new Date() })
         .where(eq(tasks.id, task.id))
@@ -247,7 +254,7 @@ Summary: ${reviewResult.summary}`;
   const forceResult: ReviewResult = {
     verdict: 'approve',
     issues: [],
-    summary: `Auto-accepted after ${maxCycles} review cycles (max reached)`,
+    summary: `Auto-accepted after ${effectiveMaxCycles} review cycles (max reached)`,
   };
 
   db.update(tasks)

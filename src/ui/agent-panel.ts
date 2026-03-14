@@ -1,10 +1,5 @@
-import chalk from 'chalk';
 import { MarkdownRenderer } from './markdown.js';
-
-const border = chalk.blue;
-const iconRunning = chalk.blue('▶');
-const iconDone = chalk.green('✓');
-const iconFailed = chalk.red('✗');
+import { c, border, box, icons } from './theme.js';
 
 interface AgentSlot {
   id: string;
@@ -17,6 +12,8 @@ interface AgentSlot {
   lineBuffer: string;
   /** Markdown renderer scoped to this agent's output. */
   renderer: MarkdownRenderer;
+  /** Width of the header box (for the matching footer). */
+  boxWidth: number;
 }
 
 export class AgentPanel {
@@ -24,7 +21,24 @@ export class AgentPanel {
   private activeId: string | null = null;
 
   addAgent(id: string, role: string, taskId: string, taskTitle: string): void {
-    const label = `${role} ─ ${taskId}: ${taskTitle}`;
+    const maxWidth = Math.min(process.stdout.columns || 80, 80);
+
+    // Build inner content: ─ role ─── task-id: title ─
+    const roleStr = ` ${role} `;
+    const taskStr = ` ${taskId}: ${taskTitle} `;
+    // 2 corners + at least 1 dash on each side of role + 3 dashes between role and task
+    const fixedChrome = 2 + 1 + roleStr.length + 3 + taskStr.length + 1;
+    const trailingDashes = Math.max(1, maxWidth - fixedChrome);
+    const boxWidth = fixedChrome + trailingDashes;
+
+    const headerLine =
+      border.accent(box.topLeft + box.horizontal) +
+      c.secondaryBold(roleStr) +
+      border.accent(box.horizontal.repeat(3)) +
+      c.subtle(taskStr) +
+      border.accent(box.horizontal.repeat(trailingDashes) + box.topRight);
+
+    const label = `${role} ${box.horizontal} ${taskId}: ${taskTitle}`;
     const slot: AgentSlot = {
       id,
       label,
@@ -33,20 +47,20 @@ export class AgentPanel {
       midLine: false,
       lineBuffer: '',
       renderer: new MarkdownRenderer(),
+      boxWidth,
     };
     this.slots.set(id, slot);
     this.activeId = id;
 
     // Print header
-    process.stdout.write(`${iconRunning} ${label}\n`);
-    process.stdout.write(border('─'.repeat(Math.min(process.stdout.columns || 80, 80))) + '\n');
+    process.stdout.write(headerLine + '\n');
   }
 
   appendOutput(id: string, chunk: string): void {
     const slot = this.slots.get(id);
     if (!slot || slot.status !== 'running') return;
 
-    const prefix = border('│ ');
+    const prefix = border.accent(box.vertical) + ' ';
 
     let i = 0;
     while (i < chunk.length) {
@@ -105,16 +119,24 @@ export class AgentPanel {
     // Flush any buffered table rows
     const remaining = slot.renderer.flush();
     if (remaining.length > 0) {
-      const prefix = border('│ ');
+      const prefix = border.accent(box.vertical) + ' ';
       for (const rl of remaining) {
         process.stdout.write(prefix + rl + '\n');
       }
     }
 
-    // Print footer
-    const icon = success ? iconDone : iconFailed;
-    const verb = success ? 'completed' : 'failed';
-    process.stdout.write(`${icon} ${slot.role} ${verb}\n\n`);
+    // Print footer status line
+    const statusLine = success
+      ? c.success(icons.success) + ' ' + c.secondaryBold(slot.role) + ' ' + c.subtle('completed')
+      : c.error(icons.error) + ' ' + c.secondaryBold(slot.role) + ' ' + c.error('failed');
+    const statusPrefix = border.accent(box.vertical) + ' ';
+    process.stdout.write(statusPrefix + statusLine + '\n');
+
+    // Print bottom border
+    const innerWidth = Math.max(0, slot.boxWidth - 2);
+    const bottomLine =
+      border.accent(box.bottomLeft + box.horizontal.repeat(innerWidth) + box.bottomRight);
+    process.stdout.write(bottomLine + '\n\n');
 
     if (this.activeId === id) {
       this.activeId = null;

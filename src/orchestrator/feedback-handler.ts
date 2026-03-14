@@ -223,6 +223,46 @@ export function getIterationHistory(sessionId: string) {
     .all();
 }
 
+/**
+ * Re-queue any incomplete tasks so the orchestrator retries them.
+ * Covers failed/blocked tasks AND tasks stuck in intermediate states
+ * (running/reviewing/fixing) from interrupted builds (crash, stop, timeout).
+ */
+export function requeueIncompleteTasks(sessionId: string): void {
+  const db = getDb();
+  const requeableStatuses = new Set(['failed', 'blocked', 'running', 'reviewing', 'fixing']);
+  const remainingTasks = getTasksForSession(sessionId);
+  const session = getSession(sessionId);
+  const repoPath = session?.repoLocalPath;
+
+  for (const t of remainingTasks) {
+    if (requeableStatuses.has(t.status)) {
+      // Delete the old branch before clearing branchName to avoid orphaned branches
+      if (t.branchName && repoPath) {
+        try {
+          git(['branch', '-D', t.branchName], repoPath);
+        } catch {
+          // Branch may not exist or may already be deleted — that's fine
+        }
+      }
+
+      db.update(tasksTable)
+        .set({
+          status: 'queued',
+          reviewVerdict: null,
+          reviewIssues: null,
+          reviewCycles: 0,
+          diffPatch: null,
+          agentOutput: null,
+          branchName: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(tasksTable.id, t.id))
+        .run();
+    }
+  }
+}
+
 export async function handleFeedback(sessionId: string, feedbackText: string, images?: string[]): Promise<void> {
   const config = loadConfig();
   const session = getSession(sessionId);
@@ -321,28 +361,7 @@ export async function handleFeedback(sessionId: string, feedbackText: string, im
     console.log('Build was interrupted — retrying all tasks...\n');
   }
 
-  // Re-queue any tasks still in failed/blocked state so the orchestrator retries them.
-  // The plan delta may not explicitly mention every failed task, but they all need another chance.
-  {
-    const remainingTasks = getTasksForSession(sessionId);
-    for (const t of remainingTasks) {
-      if (t.status === 'failed' || t.status === 'blocked') {
-        db.update(tasksTable)
-          .set({
-            status: 'queued',
-            reviewVerdict: null,
-            reviewIssues: null,
-            reviewCycles: 0,
-            diffPatch: null,
-            agentOutput: null,
-            branchName: null,
-            updatedAt: new Date(),
-          })
-          .where(eq(tasksTable.id, t.id))
-          .run();
-      }
-    }
-  }
+  requeueIncompleteTasks(sessionId);
 
   // Re-run orchestrator on modified/new tasks
   const repoPath = session.repoLocalPath!;

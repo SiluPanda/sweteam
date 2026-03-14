@@ -5,6 +5,7 @@ import { git, createBranch, getDiff, getStagedDiff, commitAll } from '../git/git
 import { resolveAdapter } from '../adapters/adapter.js';
 import { loadConfig } from '../config/loader.js';
 import { displayTaskId } from './orchestrator.js';
+import { safeJsonParse } from './dag.js';
 
 export interface TaskRecord {
   id: string;
@@ -21,13 +22,13 @@ export interface TaskRecord {
 
 export function buildCoderPrompt(task: TaskRecord, dependencyDiffs: string[]): string {
   const files = task.filesLikelyTouched
-    ? JSON.parse(task.filesLikelyTouched).join('\n')
+    ? safeJsonParse<string[]>(task.filesLikelyTouched, []).join('\n') || '(not specified)'
     : '(not specified)';
 
   const criteria = task.acceptanceCriteria
-    ? JSON.parse(task.acceptanceCriteria)
+    ? safeJsonParse<string[]>(task.acceptanceCriteria, [])
         .map((c: string) => `- ${c}`)
-        .join('\n')
+        .join('\n') || '(none specified)'
     : '(none specified)';
 
   const contextDiffs =
@@ -58,7 +59,7 @@ export function getDependencyDiffs(task: TaskRecord): string[] {
   if (!task.dependsOn) return [];
 
   const db = getDb();
-  const depIds: string[] = JSON.parse(task.dependsOn);
+  const depIds: string[] = safeJsonParse(task.dependsOn, []);
   const diffs: string[] = [];
 
   for (const depId of depIds) {

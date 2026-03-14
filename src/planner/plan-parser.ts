@@ -144,12 +144,16 @@ function parseMarkdown(text: string): ParsedTask[] {
 }
 
 function extractSection(content: string, keyword: string): string {
-  const pattern = new RegExp(
-    `(?:^|\\n)\\s*\\*?\\*?${keyword}\\*?\\*?[:\\s]*(.+?)(?=\\n\\s*\\*?\\*?\\w+[:\\s]|$)`,
-    'is',
-  );
-  const match = content.match(pattern);
-  return match ? match[1].trim() : '';
+  const lines = content.split('\n');
+  const lowerKeyword = keyword.toLowerCase();
+  for (const line of lines) {
+    const stripped = line.replace(/\*/g, '').trim();
+    if (stripped.toLowerCase().startsWith(lowerKeyword)) {
+      const value = stripped.slice(keyword.length).replace(/^[:\s]+/, '').trim();
+      if (value) return value;
+    }
+  }
+  return '';
 }
 
 function extractListItems(content: string, keyword: string): string[] {

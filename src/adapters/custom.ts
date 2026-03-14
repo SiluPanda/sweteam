@@ -1,4 +1,5 @@
 import { spawn, execFileSync } from 'child_process';
+import { randomUUID } from 'crypto';
 import { writeFileSync, readFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -54,8 +55,8 @@ export class CustomAdapter implements AgentAdapter {
       if (promptVia === 'arg') {
         args.push(opts.prompt);
       } else if (promptVia === 'file') {
-        promptFile = join(tmpdir(), `sweteam-prompt-${Date.now()}.txt`);
-        writeFileSync(promptFile, opts.prompt);
+        promptFile = join(tmpdir(), `sweteam-prompt-${randomUUID()}.txt`);
+        writeFileSync(promptFile, opts.prompt, { mode: 0o600 });
         args.push(promptFile);
       }
 
@@ -65,6 +66,7 @@ export class CustomAdapter implements AgentAdapter {
       });
       trackProcess(proc, opts.sessionId);
 
+      const MAX_OUTPUT_SIZE = 10 * 1024 * 1024;
       let stdout = '';
       let stderr = '';
       let recentOutput = '';
@@ -72,12 +74,20 @@ export class CustomAdapter implements AgentAdapter {
       let waitingForInput = false;
       let settled = false;
 
-      // Prevent EPIPE crashes
-      proc.stdin.on('error', () => {});
+      // Silence EPIPE but log other stdin errors
+      proc.stdin.on('error', (err: NodeJS.ErrnoException) => {
+        if (err.code !== 'EPIPE') {
+          console.error(`stdin error: ${err.message}`);
+        }
+      });
 
       proc.stdout.on('data', (chunk: Buffer) => {
         const text = chunk.toString();
-        stdout += text;
+        if (stdout.length + text.length > MAX_OUTPUT_SIZE) {
+          stdout = stdout.slice(stdout.length + text.length - MAX_OUTPUT_SIZE) + text;
+        } else {
+          stdout += text;
+        }
         if (opts.onOutput) {
           opts.onOutput(text);
         }
@@ -92,27 +102,32 @@ export class CustomAdapter implements AgentAdapter {
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
           if (waitingForInput || settled) return;
-          if (detectInputPrompt(recentOutput)) {
+          const captured = recentOutput;
+          recentOutput = '';
+          if (detectInputPrompt(captured)) {
             waitingForInput = true;
-            const promptText = extractPromptText(recentOutput);
+            const promptText = extractPromptText(captured);
             opts.onInputNeeded!(promptText)
               .then((response) => {
                 waitingForInput = false;
                 if (response !== null && !proc.killed) {
                   proc.stdin.write(response + '\n');
                 }
-                recentOutput = '';
               })
               .catch(() => {
                 waitingForInput = false;
-                recentOutput = '';
               });
           }
         }, 2000);
       });
 
       proc.stderr.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString();
+        const errText = chunk.toString();
+        if (stderr.length + errText.length > MAX_OUTPUT_SIZE) {
+          stderr = stderr.slice(stderr.length + errText.length - MAX_OUTPUT_SIZE) + errText;
+        } else {
+          stderr += errText;
+        }
       });
 
       const timer =
@@ -143,6 +158,15 @@ export class CustomAdapter implements AgentAdapter {
           return;
         }
         settled = true;
+
+        // Close stdin if it was kept open for interactive input
+        if (opts.onInputNeeded) {
+          try {
+            if (!proc.stdin.destroyed) proc.stdin.end();
+          } catch {
+            /* already closed */
+          }
+        }
 
         let output = stdout || stderr;
 
@@ -178,17 +202,9 @@ export class CustomAdapter implements AgentAdapter {
         // If onInputNeeded is provided, keep stdin open for interactive responses
         if (!opts.onInputNeeded) {
           proc.stdin.end();
-        } else {
-          proc.on('close', () => {
-            try {
-              if (!proc.stdin.destroyed) proc.stdin.end();
-            } catch {
-              /* already closed */
-            }
-          });
         }
       } else {
-        // For arg/file prompt modes, close stdin immediately to prevent agent from blocking on stdin read
+        // For arg/file prompt modes, close stdin unless interactive input is expected
         if (!opts.onInputNeeded) {
           proc.stdin.end();
         }

@@ -68,14 +68,19 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       );
       trackProcess(proc, opts.sessionId);
 
+      const MAX_OUTPUT_SIZE = 10 * 1024 * 1024;
       let accumulatedText = '';
       let resultText: string | null = null;
       let stderr = '';
       let lineBuffer = '';
       let settled = false;
 
-      // Prevent EPIPE crashes if process dies before stdin write
-      proc.stdin.on('error', () => {});
+      // Silence EPIPE but log other stdin errors
+      proc.stdin.on('error', (err: NodeJS.ErrnoException) => {
+        if (err.code !== 'EPIPE') {
+          console.error(`stdin error: ${err.message}`);
+        }
+      });
 
       function processLine(line: string) {
         const trimmed = line.trim();
@@ -86,7 +91,16 @@ export class ClaudeCodeAdapter implements AgentAdapter {
           parsed = JSON.parse(trimmed);
         } catch {
           // Non-JSON line — treat as raw text (backward compat)
-          accumulatedText += line + '\n';
+          const rawLine = line + '\n';
+          if (accumulatedText.length + rawLine.length > MAX_OUTPUT_SIZE) {
+            accumulatedText = accumulatedText.slice(accumulatedText.length + rawLine.length - MAX_OUTPUT_SIZE) + rawLine;
+          } else {
+            accumulatedText += rawLine;
+          }
+          // Log if it looks like an error message
+          if (/^(error:|Error:|fatal:|Authentication|not found)/i.test(trimmed)) {
+            console.error(`claude-code non-JSON error output: ${trimmed}`);
+          }
           if (opts.onOutput) opts.onOutput(line + '\n');
           return;
         }
@@ -107,7 +121,12 @@ export class ClaudeCodeAdapter implements AgentAdapter {
               if (opts.onOutput) opts.onOutput(progressLine + '\n');
             } else if (block.type === 'text') {
               // Accumulate text silently — don't send to panel
-              accumulatedText += (block.text as string) ?? '';
+              const blockText = (block.text as string) ?? '';
+              if (accumulatedText.length + blockText.length > MAX_OUTPUT_SIZE) {
+                accumulatedText = accumulatedText.slice(accumulatedText.length + blockText.length - MAX_OUTPUT_SIZE) + blockText;
+              } else {
+                accumulatedText += blockText;
+              }
             }
           }
         } else if (type === 'result') {
@@ -133,7 +152,11 @@ export class ClaudeCodeAdapter implements AgentAdapter {
 
       proc.stderr.on('data', (chunk: Buffer) => {
         const text = chunk.toString();
-        stderr += text;
+        if (stderr.length + text.length > MAX_OUTPUT_SIZE) {
+          stderr = stderr.slice(stderr.length + text.length - MAX_OUTPUT_SIZE) + text;
+        } else {
+          stderr += text;
+        }
       });
 
       const timer =

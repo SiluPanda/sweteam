@@ -1,4 +1,4 @@
-import chalk from 'chalk';
+import { c, border, icons, vLen, vTrunc } from './theme.js';
 
 /**
  * Streaming-friendly markdown renderer for terminal output.
@@ -21,22 +21,29 @@ export class MarkdownRenderer {
       this.inCodeBlock = !this.inCodeBlock;
       if (this.inCodeBlock) {
         const lang = line.replace(/^\s*```/, '').trim();
-        const label = lang ? ` ${lang} ` : '';
-        const ruleLen = Math.max(0, 40 - label.length);
-        return [...flushed, chalk.dim(`  ${'─'.repeat(2)}${label}${'─'.repeat(ruleLen)}`)];
+        if (lang) {
+          const ruleLen = Math.max(0, 36 - lang.length);
+          return [
+            ...flushed,
+            '  ' + border.dim('──') + c.info(` ${lang} `) + border.dim('─'.repeat(ruleLen)),
+          ];
+        }
+        return [...flushed, '  ' + border.dim('─'.repeat(42))];
       }
-      return [...flushed, chalk.dim(`  ${'─'.repeat(42)}`)];
+      return [...flushed, '  ' + border.dim('─'.repeat(42))];
     }
 
-    // Inside code block — show dimmed with a gutter
+    // Inside code block — show with subtle color and a gutter
     if (this.inCodeBlock) {
-      return [chalk.dim(`  ${line}`)];
+      return [c.subtle(`  ${line}`)];
     }
 
     // Table row: buffer lines that look like | … | for batch rendering
     if (isTableRow(line)) {
+      // Flush incrementally if buffer exceeds max size to bound memory usage
+      const flushedRows = this.tableBuffer.length >= 500 ? this.flushTable() : [];
       this.tableBuffer.push(line);
-      return [];
+      return flushedRows;
     }
 
     // Non-table line — flush any buffered table first
@@ -47,26 +54,26 @@ export class MarkdownRenderer {
     if (headerMatch) {
       const level = headerMatch[1].length;
       const text = renderInline(headerMatch[2]);
-      if (level === 1) return [...flushed, '\n' + chalk.bold.underline(text)];
-      if (level === 2) return [...flushed, '\n' + chalk.bold(text)];
-      return [...flushed, chalk.bold(text)];
+      if (level === 1) return [...flushed, '\n' + c.brightBold(c.underline(text))];
+      if (level === 2) return [...flushed, '\n' + c.primaryBold(text)];
+      return [...flushed, c.bold(text)];
     }
 
     // Horizontal rule: --- / *** / ___
     if (/^\s*[-*_]{3,}\s*$/.test(line)) {
-      return [...flushed, chalk.dim('─'.repeat(40))];
+      return [...flushed, c.muted('· '.repeat(20))];
     }
 
     // Blockquote: > text
     const bqMatch = line.match(/^>\s?(.*)/);
     if (bqMatch) {
-      return [...flushed, chalk.dim('  │ ') + renderInline(bqMatch[1])];
+      return [...flushed, c.primary('  │ ') + renderInline(bqMatch[1])];
     }
 
     // Unordered list item: - / * / + followed by space
     const ulMatch = line.match(/^(\s*)[-*+]\s+(.*)/);
     if (ulMatch) {
-      return [...flushed, `${ulMatch[1]}  ${chalk.dim('•')} ${renderInline(ulMatch[2])}`];
+      return [...flushed, `${ulMatch[1]}  ${c.info(icons.bullet)} ${renderInline(ulMatch[2])}`];
     }
 
     // Ordered list item: 1. text
@@ -74,7 +81,7 @@ export class MarkdownRenderer {
     if (olMatch) {
       return [
         ...flushed,
-        `${olMatch[1]}  ${chalk.dim(olMatch[2] + '.')} ${renderInline(olMatch[3])}`,
+        `${olMatch[1]}  ${c.info(olMatch[2] + '.')} ${renderInline(olMatch[3])}`,
       ];
     }
 
@@ -134,42 +141,46 @@ function renderTable(bufferedLines: string[]): string[] {
     while (row.length < maxCols) row.push('');
   }
 
-  // Calculate column widths, capped at 30 visible chars
+  // Apply inline formatting first, then measure visible widths
+  const styledRows: string[][] = rows.map((row, i) =>
+    row.map((cell) => (i === 0 ? c.brightBold(cell) : renderInline(cell))),
+  );
+
+  // Calculate column widths based on visible length, capped at 30 chars
   const MAX_COL = 30;
   const colW: number[] = new Array(maxCols).fill(0);
-  for (const row of rows) {
+  for (const row of styledRows) {
     for (let j = 0; j < maxCols; j++) {
-      colW[j] = Math.min(MAX_COL, Math.max(colW[j], row[j].length));
+      colW[j] = Math.min(MAX_COL, Math.max(colW[j], vLen(row[j])));
     }
   }
 
-  const dim = chalk.dim;
+  // Pad or truncate based on visible width, preserving ANSI codes
   const pad = (s: string, w: number): string => {
-    if (s.length > w) return s.slice(0, w - 1) + '…';
-    return s.padEnd(w);
+    const visible = vLen(s);
+    if (visible > w) return vTrunc(s, w - 1) + '…';
+    return s + ' '.repeat(w - visible);
   };
 
   const out: string[] = [];
 
   // Top border: ┌──┬──┐
-  out.push(dim('  ┌' + colW.map((w) => '─'.repeat(w + 2)).join('┬') + '┐'));
+  out.push(border.dim('  ┌' + colW.map((w) => '─'.repeat(w + 2)).join('┬') + '┐'));
 
-  for (let i = 0; i < rows.length; i++) {
-    const cells = rows[i].map((c, j) => {
-      const content = pad(c, colW[j]);
-      // First row is the header — render bold
-      return i === 0 ? chalk.bold(content) : renderInline(content);
-    });
-    out.push(dim('  │') + cells.map((c) => ` ${c} `).join(dim('│')) + dim('│'));
+  for (let i = 0; i < styledRows.length; i++) {
+    const cells = styledRows[i].map((cell, j) => pad(cell, colW[j]));
+    out.push(
+      border.dim('  │') + cells.map((cell) => ` ${cell} `).join(border.dim('│')) + border.dim('│'),
+    );
 
     // Separator after header: ├──┼──┤
     if (i === 0) {
-      out.push(dim('  ├' + colW.map((w) => '─'.repeat(w + 2)).join('┼') + '┤'));
+      out.push(border.dim('  ├' + colW.map((w) => '─'.repeat(w + 2)).join('┼') + '┤'));
     }
   }
 
   // Bottom border: └──┴──┘
-  out.push(dim('  └' + colW.map((w) => '─'.repeat(w + 2)).join('┴') + '┘'));
+  out.push(border.dim('  └' + colW.map((w) => '─'.repeat(w + 2)).join('┴') + '┘'));
 
   return out;
 }
@@ -185,16 +196,16 @@ function renderInline(text: string): string {
   // Protect inline code spans from other transforms
   const codeSpans: string[] = [];
   text = text.replace(/`([^`]+)`/g, (_, code) => {
-    codeSpans.push(chalk.cyan(code));
+    codeSpans.push(c.cyan(code));
     return `\x00C${codeSpans.length - 1}\x00`;
   });
 
   // Bold: **text** or __text__
-  text = text.replace(/\*\*(.+?)\*\*/g, (_, p1) => chalk.bold(p1));
-  text = text.replace(/__(.+?)__/g, (_, p1) => chalk.bold(p1));
+  text = text.replace(/\*\*(.+?)\*\*/g, (_, p1) => c.bold(p1));
+  text = text.replace(/__(.+?)__/g, (_, p1) => c.bold(p1));
 
   // Italic: *text* (single asterisk, not preceded/followed by *)
-  text = text.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, (_, p1) => chalk.italic(p1));
+  text = text.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, (_, p1) => c.italic(p1));
 
   // Restore protected code spans
   // eslint-disable-next-line no-control-regex

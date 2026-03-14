@@ -1,31 +1,22 @@
-import chalk from 'chalk';
 import os from 'os';
 import { createRequire } from 'module';
+import {
+  brandGradient,
+  c,
+  border,
+  box,
+  icons,
+  divider,
+  vLen,
+  rPad,
+} from './theme.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../../package.json') as { version: string };
 const VERSION = pkg.version;
 
-// ── Blue theme palette ──────────────────────────────────────────────
-const border = chalk.blue;
-const accent = chalk.blueBright;
-const title = chalk.bold.blueBright;
-const dim = chalk.dim;
-const cmd = chalk.cyanBright;
-
-// ── Helpers ─────────────────────────────────────────────────────────
-
-/** Visible length of a string after stripping ANSI escape codes. */
-export function vLen(s: string): number {
-  // eslint-disable-next-line no-control-regex
-  return s.replace(/\x1b\[[0-9;]*m/g, '').length;
-}
-
-/** Pad string to `w` visible characters (right-pad with spaces). */
-export function rPad(s: string, w: number): string {
-  const diff = w - vLen(s);
-  return diff > 0 ? s + ' '.repeat(diff) : s;
-}
+// Re-export helpers that other modules import from banner
+export { vLen, rPad };
 
 /** Shorten cwd by replacing homedir with ~. */
 function shortCwd(): string {
@@ -33,6 +24,16 @@ function shortCwd(): string {
   const home = os.homedir();
   return cwd.startsWith(home) ? '~' + cwd.slice(home.length) : cwd;
 }
+
+// ── ASCII Art Logo ──────────────────────────────────────────────────
+const LOGO_LINES = [
+  '  ███████╗██╗    ██╗███████╗',
+  '  ██╔════╝██║    ██║██╔════╝',
+  '  ███████╗██║ █╗ ██║█████╗  ',
+  '  ╚════██║██║███╗██║██╔══╝  ',
+  '  ███████║╚███╔███╔╝███████╗',
+  '  ╚══════╝ ╚══╝╚══╝ ╚══════╝',
+];
 
 // ── Public API ──────────────────────────────────────────────────────
 
@@ -43,62 +44,59 @@ export interface RecentSession {
 
 export function renderBanner(sessions: RecentSession[] = []): string {
   const termW = process.stdout.columns || 80;
-  // Box outer width = termW - 1 (leave 1 col margin to avoid terminal wrap)
-  // Inner = outer - 2 (left + right border)
-  // Inner splits into left | divider | right → LW + 1 + RW = IW
-  const IW = Math.max(termW - 3, 60); // -3: left border + right border + margin
-  const LW = Math.min(44, Math.floor(IW * 0.4));
-  const RW = IW - 1 - LW; // remaining goes to right
+  const IW = Math.max(termW - 3, 60);
+  const LW = Math.min(46, Math.floor(IW * 0.45));
+  const RW = IW - 1 - LW;
 
-  // ── Mascot (from README, blue-styled) ──
-  const mascot = [
-    accent('  ┌─────────────────┐'),
-    accent('  │') + '    ◉       ◉    ' + accent('│'),
-    accent('  │') + '    ─────────    ' + accent('│'),
-    accent('  └─────────────────┘'),
+  // ── Left column: logo + info ──
+  const left: string[] = [''];
+
+  // Gradient logo
+  for (const line of LOGO_LINES) {
+    left.push('  ' + brandGradient(line));
+  }
+  left.push('  ' + brandGradient('    t  e  a  m'));
+  left.push('');
+  left.push(`  ${c.muted(icons.dot)} ${c.subtle(`v${VERSION}`)} ${c.muted(icons.dot)} ${c.subtle('orchestrator')}`);
+  left.push(`  ${c.muted(icons.dot)} ${c.dim(shortCwd())}`);
+  left.push('');
+
+  // ── Right column: commands + sessions ──
+  const right: string[] = [''];
+  right.push(' ' + c.brightBold('Quick Start'));
+  right.push('');
+
+  const cmds = [
+    { key: '/create', arg: ' [repo]', desc: 'Start a new session' },
+    { key: '/list', arg: '', desc: 'See all sessions' },
+    { key: '/enter', arg: ' <id>', desc: 'Resume a session' },
+    { key: '/help', arg: '', desc: 'Show all commands' },
   ];
 
-  // ── Left column ──
-  const left: string[] = [
-    '',
-    title('        Welcome to sweteam!'),
-    '',
-    ...mascot.map((l) => '        ' + l),
-    '',
-    dim(`      Orchestrator · v${VERSION}`),
-    dim('      ' + shortCwd()),
-    '',
-  ];
+  for (const cmd of cmds) {
+    const cmdStr = c.cyan(cmd.key) + c.muted(cmd.arg);
+    const cmdLen = vLen(cmdStr);
+    const gap = Math.max(1, RW - cmdLen - cmd.desc.length - 4);
+    right.push(` ${c.muted(icons.pointer)} ${cmdStr}${' '.repeat(gap)}${c.subtle(cmd.desc)}`);
+  }
 
-  // ── Right column ──
-  const maxCmdPad = Math.max(RW - 30, 4);
-  const right: string[] = [
-    '',
-    title(' Getting started'),
-    ' ' +
-      cmd('/create') +
-      dim(' [repo]') +
-      ' '.repeat(Math.max(maxCmdPad - 6, 1)) +
-      'Start a new session',
-    ' ' + cmd('/list') + ' '.repeat(Math.max(maxCmdPad + 5, 1)) + 'See all sessions',
-    ' ' +
-      cmd('/enter') +
-      dim(' <id>') +
-      ' '.repeat(Math.max(maxCmdPad - 3, 1)) +
-      'Resume a session',
-    ' ' + dim('─'.repeat(Math.max(RW - 4, 10))),
-    title(' Recent sessions'),
-  ];
+  right.push('');
+  right.push(' ' + divider(RW - 2, 'recent'));
+  right.push('');
 
   if (sessions.length > 0) {
-    const maxGoal = RW - 16;
+    const maxGoal = RW - 18;
     for (const s of sessions.slice(0, 3)) {
       const g = s.goal.length > maxGoal ? s.goal.slice(0, maxGoal - 1) + '…' : s.goal;
-      right.push(' ' + dim(s.id.slice(0, 12)) + ' ' + g);
+      right.push(` ${c.muted(icons.pointerEmpty)} ${c.info(s.id.slice(0, 8))} ${c.dim(g)}`);
     }
   } else {
-    right.push(' ' + dim('No recent sessions'));
+    right.push(` ${c.muted('  No recent sessions')}`);
   }
+  right.push('');
+
+  // ── Keyboard hints ──
+  right.push(` ${c.muted('Tab')} ${c.dim('autocomplete')}  ${c.muted('Esc')} ${c.dim('back')}`);
   right.push('');
 
   // ── Equalise row count ──
@@ -107,16 +105,27 @@ export function renderBanner(sessions: RecentSession[] = []): string {
   while (right.length < h) right.push('');
 
   // ── Assemble box ──
-  const label = ` sweteam v${VERSION} `;
-  const topDashes = Math.max(IW - 3 - label.length, 0);
-  const top = border('╭───') + title(label) + border('─'.repeat(topDashes)) + border('╮');
-  const bot = border('╰' + '─'.repeat(IW) + '╯');
+  const versionLabel = ` sweteam v${VERSION} `;
+  const topDashes = Math.max(IW - 3 - vLen(versionLabel), 0);
+  const topLine =
+    border.primary(box.topLeft + box.horizontal.repeat(2) + ' ') +
+    brandGradient(versionLabel) +
+    border.primary(' ' + box.horizontal.repeat(topDashes - 1) + box.topRight);
 
-  const rows: string[] = [top];
+  const botLine = border.primary(
+    box.bottomLeft + box.horizontal.repeat(IW) + box.bottomRight,
+  );
+
+  const midBorder = border.dim(box.vertical);
+  const outerBorder = border.primary(box.vertical);
+
+  const rows: string[] = [topLine];
   for (let i = 0; i < h; i++) {
-    rows.push(border('│') + rPad(left[i], LW) + border('│') + rPad(right[i], RW) + border('│'));
+    rows.push(
+      outerBorder + rPad(left[i], LW) + midBorder + rPad(right[i], RW) + outerBorder,
+    );
   }
-  rows.push(bot);
+  rows.push(botLine);
 
   return rows.join('\n');
 }
