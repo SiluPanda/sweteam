@@ -1,5 +1,5 @@
-import chalk from 'chalk';
 import { createInterface } from 'readline';
+import { c, icons, vLen } from './theme.js';
 
 /**
  * Interactive prompt with dropdown autocomplete and ghost-text.
@@ -63,7 +63,7 @@ export function promptLine(opts: PromptOptions): Promise<string> {
       clearDropdown();
 
       const width = usableWidth();
-      const promptLen = prompt.length;
+      const promptLen = vLen(prompt);
       const inputSpace = width - promptLen;
 
       // When input is longer than available space, show a sliding window around the cursor
@@ -86,7 +86,7 @@ export function promptLine(opts: PromptOptions): Promise<string> {
         const ghostRoom = width - promptLen - visibleInput.length;
         if (ghostRoom > 0) {
           const ghost = selected.slice(input.length, input.length + ghostRoom);
-          process.stdout.write(chalk.dim(ghost));
+          process.stdout.write(c.muted(ghost));
         }
       }
 
@@ -97,13 +97,13 @@ export function promptLine(opts: PromptOptions): Promise<string> {
           const item = suggestions[i];
           const truncItem = item.length > width - 3 ? item.slice(0, width - 6) + '…' : item;
           if (i === selectedIndex) {
-            process.stdout.write('\n' + chalk.bgBlue.white(` ${truncItem} `));
+            process.stdout.write('\n' + c.cyan(`${icons.arrow} `) + c.brightBold(truncItem));
           } else {
-            process.stdout.write('\n ' + chalk.dim(truncItem) + ' ');
+            process.stdout.write('\n  ' + c.subtle(truncItem));
           }
         }
         if (suggestions.length > maxVisible) {
-          process.stdout.write('\n ' + chalk.dim(`… ${suggestions.length - maxVisible} more`));
+          process.stdout.write('\n ' + c.muted(`… ${suggestions.length - maxVisible} more`));
           dropdownRows = maxVisible + 1;
         } else {
           dropdownRows = maxVisible;

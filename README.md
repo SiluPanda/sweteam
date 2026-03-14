@@ -94,7 +94,7 @@ sweteam doesn't replace your coding agents. It gives them the same structure tha
 When you launch `sweteam`, you're greeted with an interactive REPL:
 
 ```
-╭─── sweteam v0.7.0 ────────────────────────────────────────────╮
+╭─── sweteam v0.8.0 ────────────────────────────────────────────╮
 │                                │                              │
 │    Welcome to sweteam!         │ Getting started              │
 │                                │ /create [repo]  Start new    │
@@ -103,7 +103,7 @@ When you launch `sweteam`, you're greeted with an interactive REPL:
 │      │    ─────────    │       │ ──────────────────────────── │
 │      └─────────────────┘       │ Recent sessions              │
 │                                │ s_a1b2c3d4 Add dark theme    │
-│  Orchestrator · v0.7.0         │ s_e5f6g7h8 Fix auth flow     │
+│  Orchestrator · v0.8.0         │ s_e5f6g7h8 Fix auth flow     │
 │  ~/projects/myrepo             │                              │
 ╰───────────────────────────────────────────────────────────────╯
 
@@ -137,6 +137,7 @@ Inside a session, agents stream their work in real time:
 - **Feedback iterations** — session stays open; you give feedback, agents iterate on the same PR
 - **Live attach** — re-enter any session and see agent output streaming in real time
 - **Git native** — all git/GitHub operations via `git` and `gh` CLI directly
+- **Image input** — attach images to your session and forward them to underlying CLI agents
 - **Pluggable agents** — supports Claude Code, Codex CLI, OpenCode, or any custom CLI
 
 ## Prerequisites
@@ -268,7 +269,7 @@ Build complete.
   ✓ task-003  Create dark theme preset
   ✓ task-004  Create light theme preset
   ✓ task-005  Wire theme into TUI render paths
-  ⚠ task-006  Add runtime theme toggle — ESCALATED
+  ⚠ task-006  Add runtime theme toggle — FAILED
 
 PR: https://github.com/YourName/myrepo/pull/42
 
@@ -328,9 +329,14 @@ Once inside a session, use `@` commands:
 | `@status`          | Show task progress dashboard                             |
 | `@plan`            | Re-display the current plan                              |
 | `@feedback <text>` | Give feedback on completed work (triggers new iteration) |
+| `@watch`           | Re-attach to live agent output                           |
 | `@diff`            | Show cumulative diff                                     |
 | `@pr`              | Show the PR link                                         |
 | `@tasks`           | List all tasks with statuses and review info             |
+| `@ask`             | Ask the architect about the development process          |
+| `@cancel`          | Cancel the current planner run (session stays active)    |
+| `@image <path>`    | Attach image file(s) to pass to the underlying CLI agent |
+| `@images`          | List attached images (`@images clear` to remove all)     |
 | `@stop`            | Stop this session and return to REPL                     |
 | `@help`            | Show available commands                                  |
 
@@ -350,15 +356,17 @@ Inside the interactive REPL, use `/` commands:
 | `/delete <id>`   | Delete a session     |
 | `/init`          | Re-run CLI discovery |
 | `/help`          | Show help            |
-| `/exit`          | Quit                 |
+| `/exit`, `/quit` | Quit                 |
 
 ### CLI flags
 
 ```bash
 sweteam --coder codex          # Override coder agent
 sweteam --reviewer claude-code # Override reviewer agent
+sweteam --planner codex        # Override planner agent
 sweteam --parallel 5           # Override max parallel tasks
 sweteam --config ./custom.toml # Use custom config file
+sweteam --image photo.png      # Attach image file(s) to session
 ```
 
 ### List filters
@@ -546,7 +554,7 @@ src/
 ├── commands/                # CLI subcommands (create, list, enter, etc.)
 ├── config/                  # Config loader and GitHub auth
 ├── git/                     # Git and GitHub CLI wrappers
-├── ui/                      # Terminal UI (banner, prompt, agent panel, sidebar, markdown)
+├── ui/                      # Terminal UI (banner, prompt, agent panel, sidebar, markdown, theme)
 ├── db/                      # SQLite schema and client (Drizzle ORM)
 ├── utils/                   # Utility functions (time formatting)
 └── __tests__/               # Test suite
@@ -560,7 +568,7 @@ src/
 | ORM           | Drizzle                          |
 | Database      | SQLite via better-sqlite3        |
 | CLI framework | Commander.js                     |
-| Terminal UI   | Custom (chalk, raw-mode prompt)  |
+| Terminal UI   | Custom (chalk, gradient-string, raw-mode prompt)  |
 | Git           | `git` + `gh` CLI (child process) |
 | IDs           | nanoid                           |
 | Config        | TOML                             |

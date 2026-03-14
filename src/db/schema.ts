@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
 
 // ─── Sessions ───────────────────────────────────────────
 export const sessions = sqliteTable('sessions', {
@@ -28,7 +28,9 @@ export const messages = sqliteTable('messages', {
   content: text('content').notNull(), // message text
   metadata: text('metadata'), // JSON: { agent: "claude-code", phase: "planning" } etc.
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-});
+}, (table) => [
+  index('messages_session_id_idx').on(table.sessionId),
+]);
 
 // ─── Tasks ──────────────────────────────────────────────
 // Individual coding tasks decomposed from the plan.
@@ -52,7 +54,9 @@ export const tasks = sqliteTable('tasks', {
   order: integer('order').notNull(), // execution order
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
-});
+}, (table) => [
+  index('tasks_session_id_idx').on(table.sessionId),
+]);
 
 // ─── Feedback Iterations ────────────────────────────────
 // When user gives feedback after a build, each round is tracked.
@@ -66,4 +70,6 @@ export const iterations = sqliteTable('iterations', {
   planDelta: text('plan_delta'), // what changed in the plan (JSON)
   status: text('status').notNull(), // planning | building | done | failed
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-});
+}, (table) => [
+  index('iterations_session_id_idx').on(table.sessionId),
+]);

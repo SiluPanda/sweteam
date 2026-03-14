@@ -16,6 +16,7 @@ program
   .name('sweteam')
   .description("Autonomous coding agent orchestrator — turns high-level goals into PR'd code")
   .version(pkg.version)
+  .option('--planner <agent>', 'Override planner agent for this session')
   .option('--coder <agent>', 'Override coder agent for this session')
   .option('--reviewer <agent>', 'Override reviewer agent for this session')
   .option('--parallel <count>', 'Override max parallel tasks', parseInt)
@@ -26,6 +27,7 @@ program
 program.hook('preAction', () => {
   const opts = program.opts();
   setConfigOverrides({
+    planner: opts.planner,
     coder: opts.coder,
     reviewer: opts.reviewer,
     parallel: opts.parallel,
@@ -146,6 +148,7 @@ function applyOverrides(): void {
   // Parse known options from argv without triggering command handlers
   const opts = program.opts();
   setConfigOverrides({
+    planner: opts.planner,
     coder: opts.coder,
     reviewer: opts.reviewer,
     parallel: opts.parallel,

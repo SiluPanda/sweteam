@@ -55,6 +55,7 @@ const DEFAULT_CONFIG: SweteamConfig = {
 
 /** CLI overrides passed from command-line flags. */
 export interface ConfigOverrides {
+  planner?: string;
   coder?: string;
   reviewer?: string;
   parallel?: number;
@@ -98,6 +99,7 @@ export function loadConfig(configPath?: string): SweteamConfig {
   }
 
   // Apply CLI overrides
+  if (_overrides.planner) config.roles.planner = _overrides.planner;
   if (_overrides.coder) config.roles.coder = _overrides.coder;
   if (_overrides.reviewer) config.roles.reviewer = _overrides.reviewer;
   if (_overrides.parallel && _overrides.parallel > 0) {

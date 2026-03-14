@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { formatSessionTable, formatStatus } from '../commands/list.js';
+import { stripAnsi } from '../ui/theme.js';
 import type { EnrichedSession } from '../session/manager.js';
 
 function makeSession(overrides: Partial<EnrichedSession> = {}): EnrichedSession {
@@ -20,58 +21,63 @@ function makeSession(overrides: Partial<EnrichedSession> = {}): EnrichedSession 
   };
 }
 
+/** Strip ANSI codes from formatStatus output for text-content assertions. */
+function statusText(session: EnrichedSession): string {
+  return stripAnsi(formatStatus(session));
+}
+
 describe('commands/list — formatStatus', () => {
   it("should show 'planning (new)' for sessions with 0-1 messages", () => {
     expect(
-      formatStatus(makeSession({ status: 'planning', messageCount: 0, planReady: false })),
+      statusText(makeSession({ status: 'planning', messageCount: 0, planReady: false })),
     ).toBe('planning (new)');
     expect(
-      formatStatus(makeSession({ status: 'planning', messageCount: 1, planReady: false })),
+      statusText(makeSession({ status: 'planning', messageCount: 1, planReady: false })),
     ).toBe('planning (new)');
   });
 
   it("should show 'planning (N msgs)' for active conversations without a plan", () => {
     expect(
-      formatStatus(makeSession({ status: 'planning', messageCount: 3, planReady: false })),
+      statusText(makeSession({ status: 'planning', messageCount: 3, planReady: false })),
     ).toBe('planning (3 msgs)');
   });
 
   it("should show 'planning (plan ready)' when plan is finalized", () => {
     expect(
-      formatStatus(makeSession({ status: 'planning', messageCount: 5, planReady: true })),
+      statusText(makeSession({ status: 'planning', messageCount: 5, planReady: true })),
     ).toBe('planning (plan ready)');
   });
 
   it("should show 'building (done/total)' during build", () => {
-    expect(formatStatus(makeSession({ status: 'building', tasksDone: 2, tasksTotal: 5 }))).toBe(
+    expect(statusText(makeSession({ status: 'building', tasksDone: 2, tasksTotal: 5 }))).toBe(
       'building (2/5)',
     );
   });
 
   it("should show 'building' when no tasks yet", () => {
-    expect(formatStatus(makeSession({ status: 'building', tasksTotal: 0 }))).toBe('building');
+    expect(statusText(makeSession({ status: 'building', tasksTotal: 0 }))).toBe('building');
   });
 
   it("should show 'feedback (PR #N)' for awaiting_feedback with PR", () => {
-    expect(formatStatus(makeSession({ status: 'awaiting_feedback', prNumber: 42 }))).toBe(
+    expect(statusText(makeSession({ status: 'awaiting_feedback', prNumber: 42 }))).toBe(
       'feedback (PR #42)',
     );
   });
 
   it("should show 'awaiting feedback' without PR", () => {
-    expect(formatStatus(makeSession({ status: 'awaiting_feedback', prNumber: null }))).toBe(
+    expect(statusText(makeSession({ status: 'awaiting_feedback', prNumber: null }))).toBe(
       'awaiting feedback',
     );
   });
 
   it("should show 'iterating (done/total)' during iteration", () => {
-    expect(formatStatus(makeSession({ status: 'iterating', tasksDone: 3, tasksTotal: 5 }))).toBe(
+    expect(statusText(makeSession({ status: 'iterating', tasksDone: 3, tasksTotal: 5 }))).toBe(
       'iterating (3/5)',
     );
   });
 
   it("should show 'stopped' for stopped sessions", () => {
-    expect(formatStatus(makeSession({ status: 'stopped' }))).toBe('stopped');
+    expect(statusText(makeSession({ status: 'stopped' }))).toBe('stopped');
   });
 });
 
@@ -104,10 +110,10 @@ describe('commands/list — formatSessionTable', () => {
     expect(output).toContain('…');
   });
 
-  it('should show enriched status in table', () => {
+  it('should show status badge in table', () => {
     const sessions = [makeSession({ status: 'planning', messageCount: 5, planReady: true })];
     const output = formatSessionTable(sessions);
-    expect(output).toContain('plan ready');
+    expect(output).toContain('planning');
   });
 
   it('should show Updated column with relative time', () => {
@@ -132,5 +138,14 @@ describe('commands/list — formatSessionTable', () => {
     const output = formatSessionTable(sessions);
     expect(output).toContain('s_1');
     expect(output).toContain('s_2');
+  });
+
+  it('should show summary footer with session count', () => {
+    const sessions = [
+      makeSession({ id: 's_1', status: 'building' }),
+      makeSession({ id: 's_2', status: 'stopped' }),
+    ];
+    const output = formatSessionTable(sessions);
+    expect(output).toContain('2 sessions');
   });
 });
