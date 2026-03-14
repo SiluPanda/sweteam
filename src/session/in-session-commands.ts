@@ -7,15 +7,6 @@ import { getPlannerState } from './interactive.js';
 import { hasActiveProcesses } from '../lifecycle.js';
 import { c, box, icons, progressBar, statusBadge, divider } from '../ui/theme.js';
 
-// Human-readable labels for session statuses
-const STATE_LABELS: Record<string, string> = {
-  planning: 'Planning',
-  building: 'Building',
-  awaiting_feedback: 'Awaiting feedback',
-  iterating: 'Iterating',
-  stopped: 'Stopped',
-};
-
 /** Format a duration in ms to a human-readable string like "2m 30s" or "31m". */
 function formatDuration(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);

@@ -150,7 +150,7 @@ describe('MarkdownRenderer — table column widths', () => {
       '| **gamma**  | `done`   | third entry  |',
     ];
 
-    let output: string[] = [];
+    const output: string[] = [];
     for (const line of tableLines) {
       output.push(...renderer.renderLine(line));
     }
@@ -206,7 +206,7 @@ describe('MarkdownRenderer — large table buffer flush', () => {
       rows.push(`| ${i} | val-${i} |`);
     }
 
-    let allOutput: string[] = [];
+    const allOutput: string[] = [];
     for (const line of rows) {
       allOutput.push(...renderer.renderLine(line));
     }
@@ -228,7 +228,7 @@ describe('MarkdownRenderer — large table buffer flush', () => {
     // Buffer exactly 500 rows, then add one more — should trigger flush
     const header = '| col |';
     const sep = '|-----|';
-    let earlyFlush: string[] = [];
+    const earlyFlush: string[] = [];
 
     // Feed header + separator + 498 data rows = 500 table lines
     renderer.renderLine(header);

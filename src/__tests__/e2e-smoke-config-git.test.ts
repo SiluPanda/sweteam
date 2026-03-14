@@ -80,7 +80,7 @@ coder = "x"
       return text
         .toLowerCase()
         .trim()
-        .replace(/[\s~^:?*\[\]\\]+/g, '-')
+        .replace(/[\s~^:?*[\]\\]+/g, '-')
         .replace(/\.{2,}/g, '-')
         .replace(/^-+|-+$/g, '')
         .replace(/-{2,}/g, '-')

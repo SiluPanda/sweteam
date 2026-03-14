@@ -23,7 +23,7 @@ function slugify(text: string): string {
   return text
     .toLowerCase()
     .trim()
-    .replace(/[\s~^:?*\[\]\\]+/g, '-')  // replace invalid git branch chars with dash
+    .replace(/[\s~^:?*[\]\\]+/g, '-')  // replace invalid git branch chars with dash
     .replace(/\.{2,}/g, '-')             // replace consecutive dots
     .replace(/^-+|-+$/g, '')             // trim leading/trailing dashes
     .replace(/-{2,}/g, '-')              // collapse multiple dashes

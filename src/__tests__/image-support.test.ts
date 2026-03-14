@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CustomAdapter } from '../adapters/custom.js';
-import type { AgentAdapter, AgentResult } from '../adapters/adapter.js';
+import type { AgentAdapter } from '../adapters/adapter.js';
 
 describe('image support — adapter interface', () => {
   it('AgentAdapter interface should accept optional images', async () => {
@@ -181,7 +181,7 @@ describe('image support — session handlers', () => {
       killSessionProcesses: vi.fn(),
     }));
 
-    const { handleSessionCommand, createSessionHandlers } = await import(
+    const { createSessionHandlers } = await import(
       '../session/interactive.js'
     );
 
