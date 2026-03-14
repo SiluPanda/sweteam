@@ -113,6 +113,12 @@ describe('image support — session handlers', () => {
   });
 
   it('should dispatch @image command to handler', async () => {
+    // Mock fs.existsSync to accept test paths
+    vi.doMock('fs', async () => {
+      const actual = await vi.importActual<typeof import('fs')>('fs');
+      return { ...actual, existsSync: (p: string) => p.startsWith('/path/to/') ? true : actual.existsSync(p) };
+    });
+
     // Mock dependencies
     vi.doMock('../db/client.js', () => ({
       getDb: () => ({
@@ -207,6 +213,12 @@ describe('image support — session handlers', () => {
   });
 
   it('should handle @image via handleSessionCommand', async () => {
+    // Mock fs.existsSync to accept test paths
+    vi.doMock('fs', async () => {
+      const actual = await vi.importActual<typeof import('fs')>('fs');
+      return { ...actual, existsSync: (p: string) => p.startsWith('/path/to/') ? true : actual.existsSync(p) };
+    });
+
     vi.doMock('../db/client.js', () => ({
       getDb: () => ({
         select: () => ({
@@ -285,6 +297,12 @@ describe('image support — session handlers', () => {
   });
 
   it('should deduplicate image paths', async () => {
+    // Mock fs.existsSync to accept test paths
+    vi.doMock('fs', async () => {
+      const actual = await vi.importActual<typeof import('fs')>('fs');
+      return { ...actual, existsSync: (p: string) => p.startsWith('/path/to/') ? true : actual.existsSync(p) };
+    });
+
     vi.doMock('../db/client.js', () => ({
       getDb: () => ({
         select: () => ({

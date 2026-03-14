@@ -136,13 +136,13 @@ describe('session/manager', () => {
   describe('deleteSession', () => {
     it('should remove session from database', async () => {
       const result = await createSession({ repoInput: 'myrepo', goal: 'Goal' });
-      deleteSession(result.id);
+      await deleteSession(result.id);
 
       expect(getSession(result.id)).toBeNull();
     });
 
-    it('should throw for non-existent session', () => {
-      expect(() => deleteSession('nonexistent')).toThrow('Session not found');
+    it('should throw for non-existent session', async () => {
+      await expect(deleteSession('nonexistent')).rejects.toThrow('Session not found');
     });
   });
 

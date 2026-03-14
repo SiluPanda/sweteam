@@ -1,3 +1,4 @@
+import { existsSync } from 'fs';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
 import { sessions } from '../db/schema.js';
@@ -122,8 +123,12 @@ export function createSessionHandlers(
       if (session?.status === 'awaiting_feedback') {
         // Already awaiting feedback — route directly to feedback handler in background
         handleFeedback(sessionId, text, sessionImages.length > 0 ? sessionImages : undefined).catch((err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          addMessage(sessionId, 'system', `Feedback failed: ${msg}`);
+          try {
+            const msg = err instanceof Error ? err.message : String(err);
+            addMessage(sessionId, 'system', `Feedback failed: ${msg}`);
+          } catch (innerErr) {
+            console.error('Error in error handler:', innerErr);
+          }
         });
         await new Promise((r) => setTimeout(r, 300));
         return;
@@ -181,13 +186,17 @@ export function createSessionHandlers(
           writeEvent(sessionId, { type: 'phase-complete', id: plannerId });
         })
         .catch((err) => {
-          writeEvent(sessionId, { type: 'agent-end', id: plannerId, success: false });
+          try {
+            writeEvent(sessionId, { type: 'agent-end', id: plannerId, success: false });
 
-          const msg = err instanceof Error ? err.message : String(err);
-          const errResponse = `Error invoking planner: ${friendlyError(msg)}`;
-          addMessage(sessionId, 'agent', errResponse, { phase: 'planning' });
+            const msg = err instanceof Error ? err.message : String(err);
+            const errResponse = `Error invoking planner: ${friendlyError(msg)}`;
+            addMessage(sessionId, 'agent', errResponse, { phase: 'planning' });
 
-          writeEvent(sessionId, { type: 'phase-complete', id: plannerId });
+            writeEvent(sessionId, { type: 'phase-complete', id: plannerId });
+          } catch (innerErr) {
+            console.error('Error in error handler:', innerErr);
+          }
         })
         .finally(() => {
           planningInProgress = false;
@@ -247,14 +256,18 @@ export function createSessionHandlers(
       buildInProgress = true;
       handleBuild(sessionId, planSnapshot, buildImages)
         .catch((err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error(`\nBuild failed: ${friendlyError(msg)}\n`);
-          addMessage(sessionId, 'system', `Build failed: ${msg}`);
-          // Recover to planning state so user can retry
           try {
-            transition(sessionId, 'planning');
-          } catch {
-            /* already transitioned */
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`\nBuild failed: ${friendlyError(msg)}\n`);
+            addMessage(sessionId, 'system', `Build failed: ${msg}`);
+            // Recover to planning state so user can retry
+            try {
+              transition(sessionId, 'planning');
+            } catch {
+              /* already transitioned */
+            }
+          } catch (innerErr) {
+            console.error('Error in error handler:', innerErr);
           }
         })
         .finally(() => {
@@ -291,9 +304,13 @@ export function createSessionHandlers(
 
       console.log('\nProcessing feedback...\n');
       handleFeedback(sessionId, text, sessionImages.length > 0 ? sessionImages : undefined).catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`Feedback processing failed: ${msg}`);
-        addMessage(sessionId, 'system', `Feedback failed: ${msg}`);
+        try {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`Feedback processing failed: ${msg}`);
+          addMessage(sessionId, 'system', `Feedback failed: ${msg}`);
+        } catch (innerErr) {
+          console.error('Error in error handler:', innerErr);
+        }
       });
       // Give the feedback handler time to start writing events
       await new Promise((r) => setTimeout(r, 300));
@@ -371,11 +388,15 @@ export function createSessionHandlers(
           writeEvent(sessionId, { type: 'phase-complete', id: askId });
         })
         .catch((err) => {
-          writeEvent(sessionId, { type: 'agent-end', id: askId, success: false });
-          const msg = err instanceof Error ? err.message : String(err);
-          const errResponse = `Error invoking architect: ${friendlyError(msg)}`;
-          addMessage(sessionId, 'agent', errResponse, { phase: 'ask' });
-          writeEvent(sessionId, { type: 'phase-complete', id: askId });
+          try {
+            writeEvent(sessionId, { type: 'agent-end', id: askId, success: false });
+            const msg = err instanceof Error ? err.message : String(err);
+            const errResponse = `Error invoking architect: ${friendlyError(msg)}`;
+            addMessage(sessionId, 'agent', errResponse, { phase: 'ask' });
+            writeEvent(sessionId, { type: 'phase-complete', id: askId });
+          } catch (innerErr) {
+            console.error('Error in error handler:', innerErr);
+          }
         });
 
       // Give the architect a moment to start writing events
@@ -400,6 +421,11 @@ export function createSessionHandlers(
 
     onImage: (paths: string[]): void => {
       for (const p of paths) {
+        if (!existsSync(p)) {
+          addMessage(sessionId, 'system', `Image file not found: ${p}`);
+          console.log(`Image file not found: ${p}`);
+          continue;
+        }
         if (!sessionImages.includes(p)) {
           sessionImages.push(p);
         }
@@ -470,8 +496,10 @@ export async function handleSessionCommand(
   } else if (trimmed === '@images clear') {
     handlers.onImagesClear();
   } else if (trimmed.startsWith('@image ')) {
-    const paths = trimmed.slice('@image '.length).trim().split(/\s+/);
-    handlers.onImage(paths);
+    const imagePath = trimmed.slice('@image '.length).trim();
+    // Remove surrounding quotes if present
+    const cleanPath = imagePath.replace(/^["']|["']$/g, '');
+    handlers.onImage([cleanPath]);
   } else {
     console.log(`Unknown command: ${trimmed}. Type @help for session commands.`);
   }

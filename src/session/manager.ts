@@ -22,9 +22,12 @@ function generateSessionId(): string {
 function slugify(text: string): string {
   return text
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 30);
+    .trim()
+    .replace(/[\s~^:?*\[\]\\]+/g, '-')  // replace invalid git branch chars with dash
+    .replace(/\.{2,}/g, '-')             // replace consecutive dots
+    .replace(/^-+|-+$/g, '')             // trim leading/trailing dashes
+    .replace(/-{2,}/g, '-')              // collapse multiple dashes
+    .slice(0, 40) || 'task';             // fallback if empty
 }
 
 export interface CreateSessionOpts {
@@ -208,7 +211,7 @@ export function stopSession(id: string): void {
   killSessionProcesses(id);
 }
 
-export function deleteSession(id: string): void {
+export async function deleteSession(id: string): Promise<void> {
   const db = getDb();
   const session = getSession(id);
   if (!session) {
@@ -218,6 +221,8 @@ export function deleteSession(id: string): void {
   // Stop any active build processes before deleting
   if (session.status === 'building' || session.status === 'iterating') {
     killSessionProcesses(id);
+    // Give processes time to terminate before deleting DB rows
+    await new Promise((r) => setTimeout(r, 500));
   }
 
   // Clean up git branches associated with this session

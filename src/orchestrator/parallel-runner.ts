@@ -72,7 +72,10 @@ export async function runParallelOrchestrator(
   options?: { images?: string[] },
 ): Promise<OrchestratorResult> {
   const config = loadConfig();
-  const maxParallel = config.execution.max_parallel;
+  const maxParallel = config.execution.max_parallel >= 1 ? config.execution.max_parallel : (() => {
+    console.log(`[warn] max_parallel is ${config.execution.max_parallel}, defaulting to 1`);
+    return 1;
+  })();
   const maxReviewCycles = config.execution.max_review_cycles;
   const cb = callbacks ?? {};
 
@@ -105,6 +108,17 @@ export async function runParallelOrchestrator(
       const session = getSession(sessionId);
       if (session?.status === 'stopped') {
         addMessage(sessionId, 'system', 'Build cancelled — session stopped.');
+        // Cancel tasks stuck in running/reviewing status
+        const db = getDb();
+        const stuckTasks = getTasksForSession(sessionId).filter(
+          (t) => t.status === 'running' || t.status === 'reviewing',
+        );
+        for (const t of stuckTasks) {
+          db.update(tasksTable)
+            .set({ status: 'cancelled', updatedAt: new Date() })
+            .where(eq(tasksTable.id, t.id))
+            .run();
+        }
         break;
       }
 

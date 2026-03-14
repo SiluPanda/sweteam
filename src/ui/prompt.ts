@@ -67,13 +67,14 @@ export function promptLine(opts: PromptOptions): Promise<string> {
       const inputSpace = width - promptLen;
 
       // When input is longer than available space, show a sliding window around the cursor
+      const inputChars = Array.from(input);
       let visibleInput = input;
       let visibleCursor = cursor;
-      if (input.length > inputSpace) {
+      if (inputChars.length > inputSpace) {
         // Keep cursor roughly centered in the visible window
         let start = cursor - Math.floor(inputSpace / 2);
-        start = Math.max(0, Math.min(start, input.length - inputSpace));
-        visibleInput = input.slice(start, start + inputSpace);
+        start = Math.max(0, Math.min(start, inputChars.length - inputSpace));
+        visibleInput = inputChars.slice(start, start + inputSpace).join('');
         visibleCursor = cursor - start;
       }
 
@@ -237,7 +238,9 @@ export function promptLine(opts: PromptOptions): Promise<string> {
       // ── Backspace ──
       if (seq === '\x7f' || seq === '\b') {
         if (cursor > 0) {
-          input = input.slice(0, cursor - 1) + input.slice(cursor);
+          const chars = Array.from(input);
+          chars.splice(cursor - 1, 1);
+          input = chars.join('');
           cursor--;
           refreshSuggestions();
           render();
@@ -251,8 +254,11 @@ export function promptLine(opts: PromptOptions): Promise<string> {
       }
 
       // ── Printable characters (including paste) ──
-      for (const ch of seq) {
-        input = input.slice(0, cursor) + ch + input.slice(cursor);
+      // Use Array.from to correctly iterate over code points (handles surrogate pairs)
+      for (const ch of Array.from(seq)) {
+        const chars = Array.from(input);
+        chars.splice(cursor, 0, ch);
+        input = chars.join('');
         cursor++;
       }
       refreshSuggestions();
@@ -274,8 +280,14 @@ export function promptLine(opts: PromptOptions): Promise<string> {
     }
 
     process.stdin.setRawMode(true);
-    process.stdin.resume();
-    process.stdin.on('data', onData);
-    render();
+    try {
+      process.stdin.resume();
+      process.stdin.on('data', onData);
+      render();
+    } catch (err) {
+      // Ensure raw mode is disabled if setup throws
+      if (process.stdin.isTTY) process.stdin.setRawMode(false);
+      throw err;
+    }
   });
 }

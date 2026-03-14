@@ -212,7 +212,7 @@ export function doubleDivider(width: number, label?: string): string {
 /** Visible length of a string after stripping ANSI escape codes. */
 export function vLen(s: string): number {
   // eslint-disable-next-line no-control-regex
-  return s.replace(/\x1b\[[0-9;]*m/g, '').length;
+  return s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').length;
 }
 
 /** Pad string to `w` visible characters (right-pad with spaces). */
@@ -234,7 +234,7 @@ export function vTrunc(s: string, max: number): string {
     }
     if (esc) {
       out += ch;
-      if (ch === 'm') esc = false;
+      if (/[A-Za-z]/.test(ch)) esc = false;
       continue;
     }
     if (vis >= max) break;
@@ -247,5 +247,5 @@ export function vTrunc(s: string, max: number): string {
 /** Strip ANSI escape codes from a string. */
 export function stripAnsi(s: string): string {
   // eslint-disable-next-line no-control-regex
-  return s.replace(/\x1b\[[0-9;]*m/g, '');
+  return s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
 }

@@ -6,13 +6,24 @@ export interface DagNode {
   dependents: string[];
 }
 
+/** Safely parse a JSON string, returning `fallback` on failure. */
+export function safeJsonParse<T>(json: string | null | undefined, fallback: T): T {
+  if (json == null) return fallback;
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    console.log(`[warn] Failed to parse JSON, using fallback: ${json.slice(0, 200)}`);
+    return fallback;
+  }
+}
+
 export function buildDag(tasks: TaskRecord[]): Map<string, DagNode> {
   const dag = new Map<string, DagNode>();
 
   for (const task of tasks) {
     dag.set(task.id, {
       id: task.id,
-      dependsOn: task.dependsOn ? JSON.parse(task.dependsOn) : [],
+      dependsOn: safeJsonParse<string[]>(task.dependsOn, []),
       dependents: [],
     });
   }
@@ -23,6 +34,8 @@ export function buildDag(tasks: TaskRecord[]): Map<string, DagNode> {
       const depNode = dag.get(depId);
       if (depNode) {
         depNode.dependents.push(node.id);
+      } else {
+        console.log(`[warn] Task ${node.id} depends on non-existent task ${depId} — ignoring phantom dependency`);
       }
     }
   }
@@ -41,12 +54,19 @@ export function topologicalSort(dag: Map<string, DagNode>): string[] {
       throw new Error(`Circular dependency detected involving task: ${id}`);
     }
 
-    visiting.add(id);
     const node = dag.get(id);
-    if (node) {
-      for (const depId of node.dependsOn) {
-        visit(depId);
+    if (!node) {
+      // Phantom dependency — skip it, don't add to sorted
+      return;
+    }
+
+    visiting.add(id);
+    for (const depId of node.dependsOn) {
+      if (!dag.has(depId)) {
+        console.log(`[warn] topologicalSort: skipping phantom dependency ${depId} referenced by task ${id}`);
+        continue;
       }
+      visit(depId);
     }
     visiting.delete(id);
     visited.add(id);
@@ -75,8 +95,10 @@ export function getReadyTasks(
     if (failedIds.has(id)) continue;
     if (blockedIds.has(id)) continue;
 
-    const allDepsMet = node.dependsOn.every((depId) => completedIds.has(depId));
-    const anyDepFailed = node.dependsOn.some(
+    // Filter out phantom deps (references to non-existent tasks)
+    const validDeps = node.dependsOn.filter((depId) => dag.has(depId));
+    const allDepsMet = validDeps.every((depId) => completedIds.has(depId));
+    const anyDepFailed = validDeps.some(
       (depId) => failedIds.has(depId) || blockedIds.has(depId),
     );
 

@@ -19,7 +19,14 @@ program
   .option('--planner <agent>', 'Override planner agent for this session')
   .option('--coder <agent>', 'Override coder agent for this session')
   .option('--reviewer <agent>', 'Override reviewer agent for this session')
-  .option('--parallel <count>', 'Override max parallel tasks', parseInt)
+  .option('--parallel <count>', 'Override max parallel tasks', (value: string) => {
+    const n = parseInt(value, 10);
+    if (isNaN(n) || n < 1) {
+      console.error('Error: --parallel must be a positive integer (>= 1)');
+      process.exit(1);
+    }
+    return n;
+  })
   .option('--config <path>', 'Use custom config file path')
   .option('--image <path...>', 'Image file paths to pass to the underlying CLI agent');
 

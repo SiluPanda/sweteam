@@ -13,6 +13,7 @@ import {
   doubleDivider,
   rPad,
   vLen,
+  vTrunc,
 } from '../ui/theme.js';
 
 export interface DetailedSessionView {
@@ -197,7 +198,7 @@ export function formatDetailedView(view: DetailedSessionView): string {
     for (const msg of view.recentMessages.slice(-5)) {
       const when = msg.createdAt ? c.muted(relativeTime(msg.createdAt).padEnd(10)) : c.muted(' '.repeat(10));
       const prefix = c.info(`[${msg.role}]`.padEnd(10));
-      const truncated = msg.content.length > 60 ? msg.content.slice(0, 57) + '...' : msg.content;
+      const truncated = vLen(msg.content) > 60 ? vTrunc(msg.content, 57) + '...' : msg.content;
       lines.push(row(`${when} ${prefix} ${c.text(truncated)}`));
     }
   }

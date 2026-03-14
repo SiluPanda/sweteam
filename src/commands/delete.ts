@@ -10,7 +10,7 @@ export async function handleDelete(sessionId: string): Promise<void> {
     const errors: string[] = [];
     for (const s of all) {
       try {
-        deleteSession(s.id);
+        await deleteSession(s.id);
       } catch (err) {
         errors.push(`${s.id}: ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -28,6 +28,6 @@ export async function handleDelete(sessionId: string): Promise<void> {
     throw new Error(`Session not found: ${sessionId}`);
   }
 
-  deleteSession(sessionId);
+  await deleteSession(sessionId);
   console.log(`Session ${sessionId} deleted.`);
 }

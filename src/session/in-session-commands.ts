@@ -250,7 +250,8 @@ export function getPrDisplay(sessionId: string): string {
     return 'No PR created yet.';
   }
 
-  return `PR #${rows[0].prNumber}: ${rows[0].prUrl}`;
+  const prLabel = rows[0].prNumber ? `PR #${rows[0].prNumber}:` : 'PR:';
+  return `${prLabel} ${rows[0].prUrl}`;
 }
 
 // @tasks — Detailed task list

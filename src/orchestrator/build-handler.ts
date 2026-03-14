@@ -300,8 +300,17 @@ export async function handleBuild(sessionId: string, planOutput: string, images?
     }
   }
 
-  // Transition to awaiting_feedback
-  transition(sessionId, 'awaiting_feedback');
+  // Transition based on outcome: if all tasks failed/blocked with zero completed,
+  // go back to planning so user can @build to retry; otherwise await feedback
+  const allFailed = result.completed.length === 0 && (result.failed.length > 0 || result.blocked.length > 0);
+  if (allFailed) {
+    transition(sessionId, 'planning');
+    const failMsg = 'Build failed — all tasks failed or were blocked. Refine the plan and try @build again.';
+    addMessage(sessionId, 'system', failMsg);
+    console.log(failMsg);
+  } else {
+    transition(sessionId, 'awaiting_feedback');
+  }
 
   // Print completion report
   const report = formatCompletionReport(result, allTasks, prUrl);

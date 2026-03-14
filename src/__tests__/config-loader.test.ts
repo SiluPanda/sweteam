@@ -76,6 +76,10 @@ args = ["-q"]
       `
 [roles]
 reviewer = "codex"
+
+[agents.codex]
+command = "codex"
+args = ["-q"]
 `,
     );
 

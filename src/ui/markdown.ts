@@ -1,4 +1,4 @@
-import { c, border, icons } from './theme.js';
+import { c, border, icons, vLen, vTrunc } from './theme.js';
 
 /**
  * Streaming-friendly markdown renderer for terminal output.
@@ -40,8 +40,10 @@ export class MarkdownRenderer {
 
     // Table row: buffer lines that look like | … | for batch rendering
     if (isTableRow(line)) {
+      // Flush incrementally if buffer exceeds max size to bound memory usage
+      const flushedRows = this.tableBuffer.length >= 500 ? this.flushTable() : [];
       this.tableBuffer.push(line);
-      return [];
+      return flushedRows;
     }
 
     // Non-table line — flush any buffered table first
@@ -139,18 +141,25 @@ function renderTable(bufferedLines: string[]): string[] {
     while (row.length < maxCols) row.push('');
   }
 
-  // Calculate column widths, capped at 30 visible chars
+  // Apply inline formatting first, then measure visible widths
+  const styledRows: string[][] = rows.map((row, i) =>
+    row.map((cell) => (i === 0 ? c.brightBold(cell) : renderInline(cell))),
+  );
+
+  // Calculate column widths based on visible length, capped at 30 chars
   const MAX_COL = 30;
   const colW: number[] = new Array(maxCols).fill(0);
-  for (const row of rows) {
+  for (const row of styledRows) {
     for (let j = 0; j < maxCols; j++) {
-      colW[j] = Math.min(MAX_COL, Math.max(colW[j], row[j].length));
+      colW[j] = Math.min(MAX_COL, Math.max(colW[j], vLen(row[j])));
     }
   }
 
+  // Pad or truncate based on visible width, preserving ANSI codes
   const pad = (s: string, w: number): string => {
-    if (s.length > w) return s.slice(0, w - 1) + '…';
-    return s.padEnd(w);
+    const visible = vLen(s);
+    if (visible > w) return vTrunc(s, w - 1) + '…';
+    return s + ' '.repeat(w - visible);
   };
 
   const out: string[] = [];
@@ -158,12 +167,8 @@ function renderTable(bufferedLines: string[]): string[] {
   // Top border: ┌──┬──┐
   out.push(border.dim('  ┌' + colW.map((w) => '─'.repeat(w + 2)).join('┬') + '┐'));
 
-  for (let i = 0; i < rows.length; i++) {
-    const cells = rows[i].map((cell, j) => {
-      const content = pad(cell, colW[j]);
-      // First row is the header — render with brightBold
-      return i === 0 ? c.brightBold(content) : renderInline(content);
-    });
+  for (let i = 0; i < styledRows.length; i++) {
+    const cells = styledRows[i].map((cell, j) => pad(cell, colW[j]));
     out.push(
       border.dim('  │') + cells.map((cell) => ` ${cell} `).join(border.dim('│')) + border.dim('│'),
     );

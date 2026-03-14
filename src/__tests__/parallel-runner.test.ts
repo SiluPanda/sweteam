@@ -182,13 +182,14 @@ describe('parallel runner — DAG scheduling', () => {
 
   it('should handle tasks with dependencies on non-existent nodes', () => {
     // Task b depends on "missing" which is not in the DAG.
-    // Since "missing" is never in completedIds, b should not be ready.
+    // Phantom deps are filtered out so b is not stuck forever waiting for a
+    // non-existent task to complete.
     const tasks = [makeTask('a'), makeTask('b', ['missing'])];
     const dag = buildDag(tasks);
 
     const ready = getReadyTasks(dag, new Set(), new Set(), new Set(), new Set());
-    // a is ready, b is not (dep "missing" not completed)
-    expect(ready).toEqual(['a']);
+    // Both a and b are ready — phantom dep "missing" is ignored
+    expect(ready).toEqual(['a', 'b']);
   });
 
   it('should handle single task with no dependencies', () => {

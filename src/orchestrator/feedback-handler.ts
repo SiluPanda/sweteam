@@ -232,8 +232,20 @@ export function requeueIncompleteTasks(sessionId: string): void {
   const db = getDb();
   const requeableStatuses = new Set(['failed', 'blocked', 'running', 'reviewing', 'fixing']);
   const remainingTasks = getTasksForSession(sessionId);
+  const session = getSession(sessionId);
+  const repoPath = session?.repoLocalPath;
+
   for (const t of remainingTasks) {
     if (requeableStatuses.has(t.status)) {
+      // Delete the old branch before clearing branchName to avoid orphaned branches
+      if (t.branchName && repoPath) {
+        try {
+          git(['branch', '-D', t.branchName], repoPath);
+        } catch {
+          // Branch may not exist or may already be deleted — that's fine
+        }
+      }
+
       db.update(tasksTable)
         .set({
           status: 'queued',

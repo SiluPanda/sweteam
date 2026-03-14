@@ -527,10 +527,12 @@ export async function runRepl(opts?: ReplOptions): Promise<void> {
   sidebar.start();
 
   // Recalculate layout on terminal resize
-  process.stdout.on('resize', () => {
+  const resizeHandler = () => {
     sidebar.invalidate();
-  });
+  };
+  process.stdout.on('resize', resizeHandler);
 
+  try {
   // Pre-activate session if provided
   if (opts?.initialSession) {
     const s = opts.initialSession;
@@ -669,6 +671,9 @@ export async function runRepl(opts?: ReplOptions): Promise<void> {
     }
   }
 
-  sidebar.stop();
+  } finally {
+    process.stdout.removeListener('resize', resizeHandler);
+    sidebar.stop();
+  }
   process.exit(0);
 }

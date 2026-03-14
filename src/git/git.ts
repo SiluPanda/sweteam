@@ -13,6 +13,7 @@ export function git(args: string[], cwd: string): string {
     encoding: 'utf-8',
     timeout: 30000,
     stdio: 'pipe',
+    maxBuffer: 50 * 1024 * 1024,
   }).trim();
 }
 
@@ -25,27 +26,34 @@ export function gh(args: string[], cwd: string): string {
     encoding: 'utf-8',
     timeout: 30000,
     stdio: 'pipe',
+    maxBuffer: 50 * 1024 * 1024,
   }).trim();
 }
 
 export function resolveRepo(input: string): string {
+  let resolved: string;
+
   // Full GitHub URL: https://github.com/owner/repo
   if (input.startsWith('https://')) {
     const match = input.match(/github\.com\/([^/]+\/[^/]+)/);
     if (match) {
-      return match[1].replace(/\.git$/, '');
+      resolved = match[1].replace(/\.git$/, '');
+    } else {
+      resolved = input;
     }
-    return input;
+  } else if (input.includes('/')) {
+    // Already fully qualified: owner/repo
+    resolved = input;
+  } else {
+    // Short name: just repo name — resolve via gh api
+    const user = gh(['api', 'user', '-q', '.login'], '.');
+    resolved = `${user}/${input}`;
   }
 
-  // Already fully qualified: owner/repo
-  if (input.includes('/')) {
-    return input;
-  }
-
-  // Short name: just repo name — resolve via gh api
-  const user = gh(['api', 'user', '-q', '.login'], '.');
-  return `${user}/${input}`;
+  // Sanitize against path traversal
+  const sanitized = resolved.replace(/\.\./g, '').replace(/[<>|]/g, '');
+  if (!sanitized || sanitized === '/') throw new Error('Invalid repository name');
+  return sanitized;
 }
 
 /** Detect the default branch name for the repo (main, master, etc.). */
@@ -71,31 +79,47 @@ export function getDefaultBranch(cwd: string): string {
   }
 }
 
-export function createBranch(name: string, base: string, cwd: string): void {
+export function createBranch(name: string, base: string, cwd: string): string {
   try {
     git(['checkout', '-b', name, base], cwd);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-
-    if (msg.includes('cannot lock ref') || msg.includes('exists; cannot create')) {
-      // Git ref conflict — e.g. branch "sw/X" blocks "sw/X/Y" or vice versa.
-      // Only delete the conflicting ref if it's a sweteam-managed branch (sw/ prefix).
-      const match = msg.match(/'refs\/heads\/([^']+)' exists/);
-      if (match && match[1].startsWith('sw/')) {
-        try {
-          git(['branch', '-D', match[1]], cwd);
-        } catch {
-          /* ignore */
-        }
-      }
-      git(['checkout', '-b', name, base], cwd);
-    } else if (msg.includes('already exists')) {
-      // Branch already exists — reset it to the base for a clean start
+    return name;
+  } catch {
+    // Branch creation failed — avoid locale-dependent error message parsing.
+    // First, try checking out and resetting the existing branch (common case).
+    try {
       git(['checkout', name], cwd);
       git(['reset', '--hard', base], cwd);
-    } else {
-      // Unexpected error — do not do destructive operations, re-throw
-      throw err;
+      return name;
+    } catch {
+      // Branch doesn't exist either (ref conflict, etc.) — try deleting
+      // conflicting sweteam-managed refs, then retry with a unique suffix.
+      if (name.startsWith('sw/')) {
+        // Clean up any conflicting sw/ refs that block this path
+        try {
+          const branches = git(['branch', '--list', 'sw/*'], cwd)
+            .split('\n')
+            .map((b) => b.trim().replace(/^\* /, ''))
+            .filter(Boolean);
+          for (const branch of branches) {
+            // Delete refs that conflict with the target name hierarchy
+            if (name.startsWith(branch + '/') || branch.startsWith(name + '/')) {
+              try {
+                git(['branch', '-D', branch], cwd);
+              } catch { /* ignore */ }
+            }
+          }
+        } catch { /* ignore */ }
+
+        // Retry after cleanup
+        try {
+          git(['checkout', '-b', name, base], cwd);
+          return name;
+        } catch { /* fall through to unique name */ }
+      }
+
+      const uniqueName = `${name}-${Date.now()}`;
+      git(['checkout', '-b', uniqueName, base], cwd);
+      return uniqueName;
     }
   }
 }
@@ -214,6 +238,17 @@ export function cloneOrLocateRepo(repo: string, defaultBranch?: string): string 
   const repoPath = join(reposDir, repoDirName);
 
   if (existsSync(repoPath)) {
+    // Verify the directory is a valid git repo before operating on it
+    try {
+      git(['rev-parse', '--is-inside-work-tree'], repoPath);
+    } catch {
+      // Corrupted repo — remove and re-clone
+      rmSync(repoPath, { recursive: true, force: true });
+      mkdirSync(reposDir, { recursive: true });
+      gh(['repo', 'clone', repo, repoPath], '.');
+      return repoPath;
+    }
+
     git(['fetch', 'origin'], repoPath);
     const branch = defaultBranch ?? getDefaultBranch(repoPath);
     git(['checkout', branch], repoPath);
