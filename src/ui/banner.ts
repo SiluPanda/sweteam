@@ -16,14 +16,13 @@ function shortCwd(): string {
   return cwd.startsWith(home) ? '~' + cwd.slice(home.length) : cwd;
 }
 
-// ── ASCII Art Logo ──────────────────────────────────────────────────
+// ── ASCII Art Logo (italic style) ───────────────────────────────────
 const LOGO_LINES = [
-  '  ███████╗██╗    ██╗███████╗',
-  '  ██╔════╝██║    ██║██╔════╝',
-  '  ███████╗██║ █╗ ██║█████╗  ',
-  '  ╚════██║██║███╗██║██╔══╝  ',
-  '  ███████║╚███╔███╔╝███████╗',
-  '  ╚══════╝ ╚══╝╚══╝ ╚══════╝',
+  '                  __                        ',
+  '   _____      __ / /_  ___  ____ _ ____ ___ ',
+  '  / ___/| /| / // _ \\/ _ \\/ __ `// __ `__ \\',
+  ' (__  ) |/ |/ //  __/  __/ /_/ // / / / / /',
+  '/____/  |__/|__/\\___/\\___/\\__,_//_/ /_/ /_/ ',
 ];
 
 // ── Public API ──────────────────────────────────────────────────────
@@ -46,7 +45,6 @@ export function renderBanner(sessions: RecentSession[] = []): string {
   for (const line of LOGO_LINES) {
     left.push('  ' + brandGradient(line));
   }
-  left.push('  ' + brandGradient('    t  e  a  m'));
   left.push('');
   left.push(
     `  ${c.muted(icons.dot)} ${c.subtle(`v${VERSION}`)} ${c.muted(icons.dot)} ${c.subtle('orchestrator')}`,
