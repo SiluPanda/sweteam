@@ -28,24 +28,24 @@ function statusText(session: EnrichedSession): string {
 
 describe('commands/list — formatStatus', () => {
   it("should show 'planning (new)' for sessions with 0-1 messages", () => {
-    expect(
-      statusText(makeSession({ status: 'planning', messageCount: 0, planReady: false })),
-    ).toBe('planning (new)');
-    expect(
-      statusText(makeSession({ status: 'planning', messageCount: 1, planReady: false })),
-    ).toBe('planning (new)');
+    expect(statusText(makeSession({ status: 'planning', messageCount: 0, planReady: false }))).toBe(
+      'planning (new)',
+    );
+    expect(statusText(makeSession({ status: 'planning', messageCount: 1, planReady: false }))).toBe(
+      'planning (new)',
+    );
   });
 
   it("should show 'planning (N msgs)' for active conversations without a plan", () => {
-    expect(
-      statusText(makeSession({ status: 'planning', messageCount: 3, planReady: false })),
-    ).toBe('planning (3 msgs)');
+    expect(statusText(makeSession({ status: 'planning', messageCount: 3, planReady: false }))).toBe(
+      'planning (3 msgs)',
+    );
   });
 
   it("should show 'planning (plan ready)' when plan is finalized", () => {
-    expect(
-      statusText(makeSession({ status: 'planning', messageCount: 5, planReady: true })),
-    ).toBe('planning (plan ready)');
+    expect(statusText(makeSession({ status: 'planning', messageCount: 5, planReady: true }))).toBe(
+      'planning (plan ready)',
+    );
   });
 
   it("should show 'building (done/total)' during build", () => {

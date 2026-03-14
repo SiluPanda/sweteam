@@ -105,16 +105,22 @@ export function createBranch(name: string, base: string, cwd: string): string {
             if (name.startsWith(branch + '/') || branch.startsWith(name + '/')) {
               try {
                 git(['branch', '-D', branch], cwd);
-              } catch { /* ignore */ }
+              } catch {
+                /* ignore */
+              }
             }
           }
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
 
         // Retry after cleanup
         try {
           git(['checkout', '-b', name, base], cwd);
           return name;
-        } catch { /* fall through to unique name */ }
+        } catch {
+          /* fall through to unique name */
+        }
       }
 
       const uniqueName = `${name}-${Date.now()}`;

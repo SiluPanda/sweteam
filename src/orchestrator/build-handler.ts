@@ -122,7 +122,11 @@ export function formatCompletionReport(
   return lines.join('\n');
 }
 
-export async function handleBuild(sessionId: string, planOutput: string, images?: string[]): Promise<void> {
+export async function handleBuild(
+  sessionId: string,
+  planOutput: string,
+  images?: string[],
+): Promise<void> {
   const db = getDb();
 
   // Parse the plan
@@ -302,10 +306,12 @@ export async function handleBuild(sessionId: string, planOutput: string, images?
 
   // Transition based on outcome: if all tasks failed/blocked with zero completed,
   // go back to planning so user can @build to retry; otherwise await feedback
-  const allFailed = result.completed.length === 0 && (result.failed.length > 0 || result.blocked.length > 0);
+  const allFailed =
+    result.completed.length === 0 && (result.failed.length > 0 || result.blocked.length > 0);
   if (allFailed) {
     transition(sessionId, 'planning');
-    const failMsg = 'Build failed — all tasks failed or were blocked. Refine the plan and try @build again.';
+    const failMsg =
+      'Build failed — all tasks failed or were blocked. Refine the plan and try @build again.';
     addMessage(sessionId, 'system', failMsg);
     console.log(failMsg);
   } else {

@@ -859,17 +859,17 @@ Respond with ONLY valid JSON — a plan delta:
 
 ## 12. Error Handling & Escalation
 
-| Scenario               | Behavior                                                      |
-| ---------------------- | ------------------------------------------------------------- |
-| CLI not found          | Error at startup, suggest `sweteam init`                      |
-| `gh` not authenticated | Error with: `run gh auth login first`                         |
-| Repo not found         | Error with: `repo {repo} not found on GitHub`                 |
-| Agent times out        | Retry once, then mark task failed                             |
-| Agent non-zero exit    | Capture stderr, retry with error context, then escalate       |
-| Review fails N times   | Force-accept and merge, continue others                       |
-| Merge conflict         | Abort merge, mark task failed, continue others                |
-| All tasks escalated    | Move to `awaiting_feedback` with failure report               |
-| Dependency task failed | Downstream tasks → `blocked`                                  |
+| Scenario               | Behavior                                                |
+| ---------------------- | ------------------------------------------------------- |
+| CLI not found          | Error at startup, suggest `sweteam init`                |
+| `gh` not authenticated | Error with: `run gh auth login first`                   |
+| Repo not found         | Error with: `repo {repo} not found on GitHub`           |
+| Agent times out        | Retry once, then mark task failed                       |
+| Agent non-zero exit    | Capture stderr, retry with error context, then escalate |
+| Review fails N times   | Force-accept and merge, continue others                 |
+| Merge conflict         | Abort merge, mark task failed, continue others          |
+| All tasks escalated    | Move to `awaiting_feedback` with failure report         |
+| Dependency task failed | Downstream tasks → `blocked`                            |
 
 All errors are persisted as `system` messages in the session chat, so the user sees them when they `/enter`.
 
@@ -957,18 +957,18 @@ sweteam/
 
 ## 15. Tech Stack
 
-| Component     | Choice                      | Why                                             |
-| ------------- | --------------------------- | ----------------------------------------------- |
-| Language      | TypeScript (Node.js)        | Same ecosystem as Claude Code, fast to iterate  |
-| ORM           | Drizzle                     | Type-safe, lightweight, great SQLite support    |
-| Database      | SQLite (via better-sqlite3) | Zero setup, local, perfect for CLI tool         |
-| TUI           | Custom (chalk, gradient-string, raw-mode prompt) | Lightweight, no framework overhead    |
-| Process mgmt  | `child_process` (native)    | No extra deps for spawning CLIs                 |
-| Git           | `git` CLI directly          | No abstraction layer, user's git config applies |
-| GitHub        | `gh` CLI directly           | Auth, PR creation, repo resolution              |
-| Config        | TOML via `@iarna/toml`      | Standard for dev tools                          |
-| CLI framework | Commander.js                | Command routing, flag parsing                   |
-| IDs           | nanoid                      | Short, URL-safe, collision-resistant            |
+| Component     | Choice                                           | Why                                             |
+| ------------- | ------------------------------------------------ | ----------------------------------------------- |
+| Language      | TypeScript (Node.js)                             | Same ecosystem as Claude Code, fast to iterate  |
+| ORM           | Drizzle                                          | Type-safe, lightweight, great SQLite support    |
+| Database      | SQLite (via better-sqlite3)                      | Zero setup, local, perfect for CLI tool         |
+| TUI           | Custom (chalk, gradient-string, raw-mode prompt) | Lightweight, no framework overhead              |
+| Process mgmt  | `child_process` (native)                         | No extra deps for spawning CLIs                 |
+| Git           | `git` CLI directly                               | No abstraction layer, user's git config applies |
+| GitHub        | `gh` CLI directly                                | Auth, PR creation, repo resolution              |
+| Config        | TOML via `@iarna/toml`                           | Standard for dev tools                          |
+| CLI framework | Commander.js                                     | Command routing, flag parsing                   |
+| IDs           | nanoid                                           | Short, URL-safe, collision-resistant            |
 
 ---
 

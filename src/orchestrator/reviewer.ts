@@ -142,16 +142,21 @@ export async function reviewAndMerge(
   const lock = options?.withMergeLock ?? (async <T>(fn: () => Promise<T>) => fn());
 
   // Validate max_review_cycles — must be at least 1 to avoid auto-merging without review
-  const effectiveMaxCycles = maxCycles >= 1 ? maxCycles : (() => {
-    console.log(`[warn] max_review_cycles is ${maxCycles}, defaulting to 1`);
-    return 1;
-  })();
+  const effectiveMaxCycles =
+    maxCycles >= 1
+      ? maxCycles
+      : (() => {
+          console.log(`[warn] max_review_cycles is ${maxCycles}, defaulting to 1`);
+          return 1;
+        })();
 
   for (let cycle = 0; cycle < effectiveMaxCycles; cycle++) {
     // Always get a fresh diff for this review cycle
     const diff = git(['diff', `${sessionBranch}...${task.branchName}`], repoPath);
 
-    const reviewResult = await reviewTask(task, diff, repoPath, onOutput, onInputNeeded, { images: options?.images });
+    const reviewResult = await reviewTask(task, diff, repoPath, onOutput, onInputNeeded, {
+      images: options?.images,
+    });
 
     // Update review info in DB
     db.update(tasks)

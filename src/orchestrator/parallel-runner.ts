@@ -72,10 +72,13 @@ export async function runParallelOrchestrator(
   options?: { images?: string[] },
 ): Promise<OrchestratorResult> {
   const config = loadConfig();
-  const maxParallel = config.execution.max_parallel >= 1 ? config.execution.max_parallel : (() => {
-    console.log(`[warn] max_parallel is ${config.execution.max_parallel}, defaulting to 1`);
-    return 1;
-  })();
+  const maxParallel =
+    config.execution.max_parallel >= 1
+      ? config.execution.max_parallel
+      : (() => {
+          console.log(`[warn] max_parallel is ${config.execution.max_parallel}, defaulting to 1`);
+          return 1;
+        })();
   const maxReviewCycles = config.execution.max_review_cycles;
   const cb = callbacks ?? {};
 

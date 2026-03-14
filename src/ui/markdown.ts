@@ -79,10 +79,7 @@ export class MarkdownRenderer {
     // Ordered list item: 1. text
     const olMatch = line.match(/^(\s*)(\d+)\.\s+(.*)/);
     if (olMatch) {
-      return [
-        ...flushed,
-        `${olMatch[1]}  ${c.info(olMatch[2] + '.')} ${renderInline(olMatch[3])}`,
-      ];
+      return [...flushed, `${olMatch[1]}  ${c.info(olMatch[2] + '.')} ${renderInline(olMatch[3])}`];
     }
 
     // Regular line — just apply inline formatting

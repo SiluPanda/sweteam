@@ -56,10 +56,7 @@ describe('E2E smoke — adapter fixes', () => {
   // ─── 4. CustomAdapter temp file uniqueness ─────────────────────────
   describe('CustomAdapter temp file uniqueness', () => {
     it('uses crypto.randomUUID() for temp file names, not Date.now()', () => {
-      const src = readFileSync(
-        join(__dirname, '..', 'adapters', 'custom.ts'),
-        'utf-8',
-      );
+      const src = readFileSync(join(__dirname, '..', 'adapters', 'custom.ts'), 'utf-8');
 
       // Must import and use randomUUID
       expect(src).toContain("import { randomUUID } from 'crypto'");
@@ -67,9 +64,7 @@ describe('E2E smoke — adapter fixes', () => {
 
       // Must NOT use Date.now() for file naming
       // (Date.now() is fine elsewhere, but the prompt-file path must use randomUUID)
-      const promptFileLine = src
-        .split('\n')
-        .find((l) => l.includes('sweteam-prompt-'));
+      const promptFileLine = src.split('\n').find((l) => l.includes('sweteam-prompt-'));
       expect(promptFileLine).toBeDefined();
       expect(promptFileLine).toContain('randomUUID()');
       expect(promptFileLine).not.toContain('Date.now()');
@@ -79,10 +74,7 @@ describe('E2E smoke — adapter fixes', () => {
   // ─── 5. Stdout accumulation cap ────────────────────────────────────
   describe('stdout accumulation cap', () => {
     it('claude-code adapter defines MAX_OUTPUT_SIZE and truncation logic', () => {
-      const src = readFileSync(
-        join(__dirname, '..', 'adapters', 'claude-code.ts'),
-        'utf-8',
-      );
+      const src = readFileSync(join(__dirname, '..', 'adapters', 'claude-code.ts'), 'utf-8');
 
       expect(src).toMatch(/MAX_OUTPUT_SIZE\s*=\s*\d+/);
       // Verify truncation: slicing when accumulated text exceeds MAX_OUTPUT_SIZE
@@ -91,10 +83,7 @@ describe('E2E smoke — adapter fixes', () => {
     });
 
     it('custom adapter defines MAX_OUTPUT_SIZE and truncation logic', () => {
-      const src = readFileSync(
-        join(__dirname, '..', 'adapters', 'custom.ts'),
-        'utf-8',
-      );
+      const src = readFileSync(join(__dirname, '..', 'adapters', 'custom.ts'), 'utf-8');
 
       expect(src).toMatch(/MAX_OUTPUT_SIZE\s*=\s*\d+/);
       expect(src).toContain('.slice(');

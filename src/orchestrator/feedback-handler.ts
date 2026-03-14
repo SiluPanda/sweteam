@@ -263,7 +263,11 @@ export function requeueIncompleteTasks(sessionId: string): void {
   }
 }
 
-export async function handleFeedback(sessionId: string, feedbackText: string, images?: string[]): Promise<void> {
+export async function handleFeedback(
+  sessionId: string,
+  feedbackText: string,
+  images?: string[],
+): Promise<void> {
   const config = loadConfig();
   const session = getSession(sessionId);
   if (!session) throw new Error(`Session not found: ${sessionId}`);

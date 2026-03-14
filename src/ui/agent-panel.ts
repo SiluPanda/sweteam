@@ -134,8 +134,9 @@ export class AgentPanel {
 
     // Print bottom border
     const innerWidth = Math.max(0, slot.boxWidth - 2);
-    const bottomLine =
-      border.accent(box.bottomLeft + box.horizontal.repeat(innerWidth) + box.bottomRight);
+    const bottomLine = border.accent(
+      box.bottomLeft + box.horizontal.repeat(innerWidth) + box.bottomRight,
+    );
     process.stdout.write(bottomLine + '\n\n');
 
     if (this.activeId === id) {

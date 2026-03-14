@@ -17,6 +17,7 @@ Audit of codebase against README and spec.md. Generated 2026-03-14.
 ### 2. Spec project structure is stale
 
 **Spec** (Section 14) lists:
+
 - `src/session/chat.ts` — does not exist (logic is in `interactive.ts`)
 - `src/session/manager.ts` — does not exist (logic is in `session-manager.ts`)
 - `src/tui/` directory — does not exist
@@ -132,10 +133,10 @@ REPL prompt and sidebar do not recalculate layout on `SIGWINCH` (terminal resize
 
 ## Summary
 
-| Category | Count |
-|----------|-------|
-| Incorrect documentation (bugs) | 4 |
-| Spec features not implemented | 8 |
-| README vs code discrepancies | 4 |
-| Code quality issues | 5 |
-| **Total findings** | **21** |
+| Category                       | Count  |
+| ------------------------------ | ------ |
+| Incorrect documentation (bugs) | 4      |
+| Spec features not implemented  | 8      |
+| README vs code discrepancies   | 4      |
+| Code quality issues            | 5      |
+| **Total findings**             | **21** |

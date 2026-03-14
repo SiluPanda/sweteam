@@ -215,7 +215,9 @@ export async function runOrchestrator(
         ? (promptText: string) => cb.onInputNeeded!(task.id, 'Coder', promptText)
         : undefined;
 
-      const result = await runTask(task, sessionBranch, repoPath, coderOutput, coderInputNeeded, { images: options?.images });
+      const result = await runTask(task, sessionBranch, repoPath, coderOutput, coderInputNeeded, {
+        images: options?.images,
+      });
       cb.onAgentEnd?.(task.id, 'Coder', result.success);
 
       if (!result.success) {
@@ -299,7 +301,12 @@ export async function runOrchestrator(
   {
     const db = getDb();
     for (const task of allTasks) {
-      if (task.status === 'queued' && !completedIds.has(task.id) && !failedIds.has(task.id) && !blockedIds.has(task.id)) {
+      if (
+        task.status === 'queued' &&
+        !completedIds.has(task.id) &&
+        !failedIds.has(task.id) &&
+        !blockedIds.has(task.id)
+      ) {
         db.update(tasksTable)
           .set({ status: 'blocked', updatedAt: new Date() })
           .where(eq(tasksTable.id, task.id))

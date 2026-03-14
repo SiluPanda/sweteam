@@ -562,17 +562,17 @@ src/
 
 ### Tech stack
 
-| Component     | Choice                           |
-| ------------- | -------------------------------- |
-| Language      | TypeScript (ESM, Node.js 20+)    |
-| ORM           | Drizzle                          |
-| Database      | SQLite via better-sqlite3        |
-| CLI framework | Commander.js                     |
-| Terminal UI   | Custom (chalk, gradient-string, raw-mode prompt)  |
-| Git           | `git` + `gh` CLI (child process) |
-| IDs           | nanoid                           |
-| Config        | TOML                             |
-| Tests         | Vitest                           |
+| Component     | Choice                                           |
+| ------------- | ------------------------------------------------ |
+| Language      | TypeScript (ESM, Node.js 20+)                    |
+| ORM           | Drizzle                                          |
+| Database      | SQLite via better-sqlite3                        |
+| CLI framework | Commander.js                                     |
+| Terminal UI   | Custom (chalk, gradient-string, raw-mode prompt) |
+| Git           | `git` + `gh` CLI (child process)                 |
+| IDs           | nanoid                                           |
+| Config        | TOML                                             |
+| Tests         | Vitest                                           |
 
 ## Contributing
 

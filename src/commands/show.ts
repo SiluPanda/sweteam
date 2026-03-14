@@ -127,10 +127,10 @@ export function formatDetailedView(view: DetailedSessionView): string {
   const bdr = border.primary;
   const innerW = BOX_WIDTH - 2; // inside the vertical bars
 
-  const row = (content: string) => bdr(box.vertical) + '  ' + rPad(content, innerW - 2) + bdr(box.vertical);
+  const row = (content: string) =>
+    bdr(box.vertical) + '  ' + rPad(content, innerW - 2) + bdr(box.vertical);
   const emptyRow = () => bdr(box.vertical) + ' '.repeat(innerW) + bdr(box.vertical);
-  const teeRow = (content: string) =>
-    bdr(box.teeLeft) + rPad(content, innerW) + bdr(box.teeRight);
+  const teeRow = (content: string) => bdr(box.teeLeft) + rPad(content, innerW) + bdr(box.teeRight);
 
   // Top border
   lines.push(bdr(box.topLeft + box.horizontal.repeat(innerW) + box.topRight));
@@ -152,8 +152,18 @@ export function formatDetailedView(view: DetailedSessionView): string {
   lines.push(row(c.subtle('Plan:     ') + c.text(view.planReady ? 'ready' : 'not finalized')));
 
   lines.push(emptyRow());
-  lines.push(row(c.subtle('Created:  ') + c.text(`${view.createdAt.toISOString()} (${relativeTime(view.createdAt)})`)));
-  lines.push(row(c.subtle('Updated:  ') + c.text(`${view.updatedAt.toISOString()} (${relativeTime(view.updatedAt)})`)));
+  lines.push(
+    row(
+      c.subtle('Created:  ') +
+        c.text(`${view.createdAt.toISOString()} (${relativeTime(view.createdAt)})`),
+    ),
+  );
+  lines.push(
+    row(
+      c.subtle('Updated:  ') +
+        c.text(`${view.updatedAt.toISOString()} (${relativeTime(view.updatedAt)})`),
+    ),
+  );
   const endTime = view.stoppedAt ?? view.updatedAt;
   lines.push(row(c.subtle('Elapsed:  ') + c.text(formatDuration(view.createdAt, endTime))));
   if (view.stoppedAt) {
@@ -176,15 +186,15 @@ export function formatDetailedView(view: DetailedSessionView): string {
     for (let i = 0; i < view.tasks.length; i++) {
       const task = view.tasks[i];
       const icon = taskIcon(task.status);
-      const connector = i < view.tasks.length - 1
-        ? c.dim(box.treeBranch)
-        : c.dim(box.treeLast);
+      const connector = i < view.tasks.length - 1 ? c.dim(box.treeBranch) : c.dim(box.treeLast);
       const review = task.reviewVerdict
         ? c.muted(` (review: ${task.reviewVerdict}, cycles: ${task.reviewCycles})`)
         : '';
-      lines.push(row(
-        `${connector} ${icon} ${c.text(displayTaskId(task.id))}: ${c.text(task.title)} ${c.dim(`[${task.status}]`)}${review}`,
-      ));
+      lines.push(
+        row(
+          `${connector} ${icon} ${c.text(displayTaskId(task.id))}: ${c.text(task.title)} ${c.dim(`[${task.status}]`)}${review}`,
+        ),
+      );
     }
   } else {
     lines.push(emptyRow());
@@ -196,7 +206,9 @@ export function formatDetailedView(view: DetailedSessionView): string {
     lines.push(emptyRow());
     lines.push(teeRow(doubleDivider(innerW, 'Recent Activity')));
     for (const msg of view.recentMessages.slice(-5)) {
-      const when = msg.createdAt ? c.muted(relativeTime(msg.createdAt).padEnd(10)) : c.muted(' '.repeat(10));
+      const when = msg.createdAt
+        ? c.muted(relativeTime(msg.createdAt).padEnd(10))
+        : c.muted(' '.repeat(10));
       const prefix = c.info(`[${msg.role}]`.padEnd(10));
       const truncated = vLen(msg.content) > 60 ? vTrunc(msg.content, 57) + '...' : msg.content;
       lines.push(row(`${when} ${prefix} ${c.text(truncated)}`));

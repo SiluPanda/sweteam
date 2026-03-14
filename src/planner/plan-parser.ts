@@ -149,7 +149,10 @@ function extractSection(content: string, keyword: string): string {
   for (const line of lines) {
     const stripped = line.replace(/\*/g, '').trim();
     if (stripped.toLowerCase().startsWith(lowerKeyword)) {
-      const value = stripped.slice(keyword.length).replace(/^[:\s]+/, '').trim();
+      const value = stripped
+        .slice(keyword.length)
+        .replace(/^[:\s]+/, '')
+        .trim();
       if (value) return value;
     }
   }

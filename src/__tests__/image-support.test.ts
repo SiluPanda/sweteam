@@ -116,7 +116,10 @@ describe('image support — session handlers', () => {
     // Mock fs.existsSync to accept test paths
     vi.doMock('fs', async () => {
       const actual = await vi.importActual<typeof import('fs')>('fs');
-      return { ...actual, existsSync: (p: string) => p.startsWith('/path/to/') ? true : actual.existsSync(p) };
+      return {
+        ...actual,
+        existsSync: (p: string) => (p.startsWith('/path/to/') ? true : actual.existsSync(p)),
+      };
     });
 
     // Mock dependencies
@@ -181,9 +184,7 @@ describe('image support — session handlers', () => {
       killSessionProcesses: vi.fn(),
     }));
 
-    const { createSessionHandlers } = await import(
-      '../session/interactive.js'
-    );
+    const { createSessionHandlers } = await import('../session/interactive.js');
 
     const handlers = createSessionHandlers('s_img', 'owner/repo', 'test', '/tmp');
 
@@ -205,9 +206,7 @@ describe('image support — session handlers', () => {
     // Verify empty after clear
     consoleSpy.mockClear();
     handlers.onImagesList();
-    expect(consoleSpy).toHaveBeenCalledWith(
-      'No images attached. Use @image <path> to add images.',
-    );
+    expect(consoleSpy).toHaveBeenCalledWith('No images attached. Use @image <path> to add images.');
 
     consoleSpy.mockRestore();
   });
@@ -216,7 +215,10 @@ describe('image support — session handlers', () => {
     // Mock fs.existsSync to accept test paths
     vi.doMock('fs', async () => {
       const actual = await vi.importActual<typeof import('fs')>('fs');
-      return { ...actual, existsSync: (p: string) => p.startsWith('/path/to/') ? true : actual.existsSync(p) };
+      return {
+        ...actual,
+        existsSync: (p: string) => (p.startsWith('/path/to/') ? true : actual.existsSync(p)),
+      };
     });
 
     vi.doMock('../db/client.js', () => ({
@@ -272,9 +274,8 @@ describe('image support — session handlers', () => {
       killSessionProcesses: vi.fn(),
     }));
 
-    const { handleSessionCommand, createSessionHandlers } = await import(
-      '../session/interactive.js'
-    );
+    const { handleSessionCommand, createSessionHandlers } =
+      await import('../session/interactive.js');
 
     const handlers = createSessionHandlers('s_cmd', 'owner/repo', 'test', '/tmp');
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -300,7 +301,10 @@ describe('image support — session handlers', () => {
     // Mock fs.existsSync to accept test paths
     vi.doMock('fs', async () => {
       const actual = await vi.importActual<typeof import('fs')>('fs');
-      return { ...actual, existsSync: (p: string) => p.startsWith('/path/to/') ? true : actual.existsSync(p) };
+      return {
+        ...actual,
+        existsSync: (p: string) => (p.startsWith('/path/to/') ? true : actual.existsSync(p)),
+      };
     });
 
     vi.doMock('../db/client.js', () => ({

@@ -35,7 +35,9 @@ export function buildDag(tasks: TaskRecord[]): Map<string, DagNode> {
       if (depNode) {
         depNode.dependents.push(node.id);
       } else {
-        console.log(`[warn] Task ${node.id} depends on non-existent task ${depId} — ignoring phantom dependency`);
+        console.log(
+          `[warn] Task ${node.id} depends on non-existent task ${depId} — ignoring phantom dependency`,
+        );
       }
     }
   }
@@ -63,7 +65,9 @@ export function topologicalSort(dag: Map<string, DagNode>): string[] {
     visiting.add(id);
     for (const depId of node.dependsOn) {
       if (!dag.has(depId)) {
-        console.log(`[warn] topologicalSort: skipping phantom dependency ${depId} referenced by task ${id}`);
+        console.log(
+          `[warn] topologicalSort: skipping phantom dependency ${depId} referenced by task ${id}`,
+        );
         continue;
       }
       visit(depId);
@@ -98,9 +102,7 @@ export function getReadyTasks(
     // Filter out phantom deps (references to non-existent tasks)
     const validDeps = node.dependsOn.filter((depId) => dag.has(depId));
     const allDepsMet = validDeps.every((depId) => completedIds.has(depId));
-    const anyDepFailed = validDeps.some(
-      (depId) => failedIds.has(depId) || blockedIds.has(depId),
-    );
+    const anyDepFailed = validDeps.some((depId) => failedIds.has(depId) || blockedIds.has(depId));
 
     if (anyDepFailed) {
       blockedIds.add(id);

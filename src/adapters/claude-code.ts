@@ -51,21 +51,23 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     const startTime = Date.now();
 
     return new Promise((resolve, reject) => {
-      const args = ['-p', '--output-format', 'stream-json', '--verbose', '--dangerously-skip-permissions'];
+      const args = [
+        '-p',
+        '--output-format',
+        'stream-json',
+        '--verbose',
+        '--dangerously-skip-permissions',
+      ];
       if (opts.images) {
         for (const img of opts.images) {
           args.push('--image', img);
         }
       }
 
-      const proc = spawn(
-        'claude',
-        args,
-        {
-          cwd: opts.cwd,
-          stdio: ['pipe', 'pipe', 'pipe'],
-        },
-      );
+      const proc = spawn('claude', args, {
+        cwd: opts.cwd,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
       trackProcess(proc, opts.sessionId);
 
       const MAX_OUTPUT_SIZE = 10 * 1024 * 1024;
@@ -93,7 +95,9 @@ export class ClaudeCodeAdapter implements AgentAdapter {
           // Non-JSON line — treat as raw text (backward compat)
           const rawLine = line + '\n';
           if (accumulatedText.length + rawLine.length > MAX_OUTPUT_SIZE) {
-            accumulatedText = accumulatedText.slice(accumulatedText.length + rawLine.length - MAX_OUTPUT_SIZE) + rawLine;
+            accumulatedText =
+              accumulatedText.slice(accumulatedText.length + rawLine.length - MAX_OUTPUT_SIZE) +
+              rawLine;
           } else {
             accumulatedText += rawLine;
           }
@@ -123,7 +127,10 @@ export class ClaudeCodeAdapter implements AgentAdapter {
               // Accumulate text silently — don't send to panel
               const blockText = (block.text as string) ?? '';
               if (accumulatedText.length + blockText.length > MAX_OUTPUT_SIZE) {
-                accumulatedText = accumulatedText.slice(accumulatedText.length + blockText.length - MAX_OUTPUT_SIZE) + blockText;
+                accumulatedText =
+                  accumulatedText.slice(
+                    accumulatedText.length + blockText.length - MAX_OUTPUT_SIZE,
+                  ) + blockText;
               } else {
                 accumulatedText += blockText;
               }

@@ -1,15 +1,6 @@
 import os from 'os';
 import { createRequire } from 'module';
-import {
-  brandGradient,
-  c,
-  border,
-  box,
-  icons,
-  divider,
-  vLen,
-  rPad,
-} from './theme.js';
+import { brandGradient, c, border, box, icons, divider, vLen, rPad } from './theme.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../../package.json') as { version: string };
@@ -57,7 +48,9 @@ export function renderBanner(sessions: RecentSession[] = []): string {
   }
   left.push('  ' + brandGradient('    t  e  a  m'));
   left.push('');
-  left.push(`  ${c.muted(icons.dot)} ${c.subtle(`v${VERSION}`)} ${c.muted(icons.dot)} ${c.subtle('orchestrator')}`);
+  left.push(
+    `  ${c.muted(icons.dot)} ${c.subtle(`v${VERSION}`)} ${c.muted(icons.dot)} ${c.subtle('orchestrator')}`,
+  );
   left.push(`  ${c.muted(icons.dot)} ${c.dim(shortCwd())}`);
   left.push('');
 
@@ -112,18 +105,14 @@ export function renderBanner(sessions: RecentSession[] = []): string {
     brandGradient(versionLabel) +
     border.primary(' ' + box.horizontal.repeat(topDashes - 1) + box.topRight);
 
-  const botLine = border.primary(
-    box.bottomLeft + box.horizontal.repeat(IW) + box.bottomRight,
-  );
+  const botLine = border.primary(box.bottomLeft + box.horizontal.repeat(IW) + box.bottomRight);
 
   const midBorder = border.dim(box.vertical);
   const outerBorder = border.primary(box.vertical);
 
   const rows: string[] = [topLine];
   for (let i = 0; i < h; i++) {
-    rows.push(
-      outerBorder + rPad(left[i], LW) + midBorder + rPad(right[i], RW) + outerBorder,
-    );
+    rows.push(outerBorder + rPad(left[i], LW) + midBorder + rPad(right[i], RW) + outerBorder);
   }
   rows.push(botLine);
 

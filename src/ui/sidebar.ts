@@ -1,16 +1,6 @@
 import { listSessionsEnriched, type EnrichedSession } from '../session/manager.js';
 import { isLogActive } from '../session/agent-log.js';
-import {
-  c,
-  border,
-  box,
-  icons,
-  progressBar,
-  divider,
-  vLen,
-  rPad,
-  vTrunc,
-} from './theme.js';
+import { c, border, box, icons, progressBar, divider, vLen, rPad, vTrunc } from './theme.js';
 
 // ── Constants ────────────────────────────────────────────────────────
 

@@ -93,7 +93,14 @@ export function getStatusDisplay(sessionId: string): string {
 
   if (taskRows.length === 0) {
     if (hasPlan) {
-      return headerLines.join('\n') + c.info('Plan ready.') + ' ' + c.text('Type ') + c.cyan('@build') + c.text(' to start autonomous coding.');
+      return (
+        headerLines.join('\n') +
+        c.info('Plan ready.') +
+        ' ' +
+        c.text('Type ') +
+        c.cyan('@build') +
+        c.text(' to start autonomous coding.')
+      );
     }
 
     // Enrich status during active planning
@@ -109,7 +116,9 @@ export function getStatusDisplay(sessionId: string): string {
       if (plannerState.lastActivityAt) {
         const sinceActivity = Date.now() - plannerState.lastActivityAt;
         if (sinceActivity > 60_000) {
-          lines.push(`  ${c.warning(icons.warning)} ${c.warning(`No output for ${formatDuration(sinceActivity)}`)}`);
+          lines.push(
+            `  ${c.warning(icons.warning)} ${c.warning(`No output for ${formatDuration(sinceActivity)}`)}`,
+          );
           if (!processAlive) {
             lines.push(
               `  ${c.warning(icons.warning)} ${c.error('Planner process may have crashed.')} ${c.text('Try')} ${c.cyan('@cancel')} ${c.text('then resend your message.')}`,
@@ -123,7 +132,12 @@ export function getStatusDisplay(sessionId: string): string {
       }
 
       lines.push('');
-      lines.push(c.dim('Hint:') + ' ' + c.cyan('@cancel') + c.text(' to abort planning, or wait for it to finish.'));
+      lines.push(
+        c.dim('Hint:') +
+          ' ' +
+          c.cyan('@cancel') +
+          c.text(' to abort planning, or wait for it to finish.'),
+      );
       return lines.join('\n');
     }
 
@@ -150,7 +164,9 @@ export function getStatusDisplay(sessionId: string): string {
     const isLast = i === taskRows.length - 1;
     const connector = isLast ? box.treeLast : box.treeBranch;
     const icon = taskIcon(task.status as string);
-    lines.push(`  ${c.dim(connector)} ${icon} ${c.cyan(displayTaskId(task.id))}  ${c.text(task.title)}  [${coloredStatus(task.status as string)}]`);
+    lines.push(
+      `  ${c.dim(connector)} ${icon} ${c.cyan(displayTaskId(task.id))}  ${c.text(task.title)}  [${coloredStatus(task.status as string)}]`,
+    );
   }
 
   const total = taskRows.length;
@@ -274,7 +290,9 @@ export function getTasksDisplay(sessionId: string): string {
     const review = task.reviewVerdict
       ? c.subtle(` (review: ${task.reviewVerdict}, cycles: ${task.reviewCycles})`)
       : '';
-    lines.push(`  ${c.dim(connector)} ${icon} ${c.cyan(displayTaskId(task.id))}: ${c.text(task.title)} [${coloredStatus(task.status as string)}]${review}`);
+    lines.push(
+      `  ${c.dim(connector)} ${icon} ${c.cyan(displayTaskId(task.id))}: ${c.text(task.title)} [${coloredStatus(task.status as string)}]${review}`,
+    );
   }
 
   return lines.join('\n');
@@ -310,30 +328,51 @@ export function getHelpDisplay(sessionId?: string): string {
 
   // @build only relevant during planning
   const buildNote = status && status !== 'planning' ? na : '';
-  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@build')}      ${c.subtle('Finalize plan and start autonomous coding')}${buildNote}`);
+  lines.push(
+    `  ${c.dim(icons.pointer)} ${c.cyan('@build')}      ${c.subtle('Finalize plan and start autonomous coding')}${buildNote}`,
+  );
 
-  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@status')}     ${c.subtle('Show current task progress dashboard')}`);
-  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@plan')}       ${c.subtle('Re-display the current plan')}`);
+  lines.push(
+    `  ${c.dim(icons.pointer)} ${c.cyan('@status')}     ${c.subtle('Show current task progress dashboard')}`,
+  );
+  lines.push(
+    `  ${c.dim(icons.pointer)} ${c.cyan('@plan')}       ${c.subtle('Re-display the current plan')}`,
+  );
 
   // @feedback works during planning (refines the plan) and awaiting_feedback (iterates on built code)
-  const fbNote =
-    status && !['planning', 'awaiting_feedback'].includes(status) ? na : '';
+  const fbNote = status && !['planning', 'awaiting_feedback'].includes(status) ? na : '';
   lines.push(
     `  ${c.dim(icons.pointer)} ${c.cyan('@feedback')}   ${c.subtle('Give feedback (refines plan during planning, iterates after build)')}${fbNote}`,
   );
 
-  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@watch')}      ${c.subtle('Re-attach to live agent output')}`);
-  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@diff')}       ${c.subtle('Show the current cumulative diff')}`);
+  lines.push(
+    `  ${c.dim(icons.pointer)} ${c.cyan('@watch')}      ${c.subtle('Re-attach to live agent output')}`,
+  );
+  lines.push(
+    `  ${c.dim(icons.pointer)} ${c.cyan('@diff')}       ${c.subtle('Show the current cumulative diff')}`,
+  );
   lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@pr')}         ${c.subtle('Show the PR link')}`);
-  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@tasks')}      ${c.subtle('List all tasks and their statuses')}`);
-  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@ask')}        ${c.subtle('Ask the architect about the development process')}`);
+  lines.push(
+    `  ${c.dim(icons.pointer)} ${c.cyan('@tasks')}      ${c.subtle('List all tasks and their statuses')}`,
+  );
+  lines.push(
+    `  ${c.dim(icons.pointer)} ${c.cyan('@ask')}        ${c.subtle('Ask the architect about the development process')}`,
+  );
   // @cancel only relevant during planning
   const cancelNote = status && status !== 'planning' ? na : '';
-  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@cancel')}     ${c.subtle('Cancel the current planner run (session stays active)')}${cancelNote}`);
-  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@image')}      ${c.subtle('Attach image file(s) to pass to the underlying CLI agent')}`);
-  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@images')}     ${c.subtle('List attached images (@images clear to remove all)')}`);
+  lines.push(
+    `  ${c.dim(icons.pointer)} ${c.cyan('@cancel')}     ${c.subtle('Cancel the current planner run (session stays active)')}${cancelNote}`,
+  );
+  lines.push(
+    `  ${c.dim(icons.pointer)} ${c.cyan('@image')}      ${c.subtle('Attach image file(s) to pass to the underlying CLI agent')}`,
+  );
+  lines.push(
+    `  ${c.dim(icons.pointer)} ${c.cyan('@images')}     ${c.subtle('List attached images (@images clear to remove all)')}`,
+  );
   lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@stop')}       ${c.subtle('Stop this session')}`);
-  lines.push(`  ${c.dim(icons.pointer)} ${c.cyan('@help')}       ${c.subtle('Show this help message')}`);
+  lines.push(
+    `  ${c.dim(icons.pointer)} ${c.cyan('@help')}       ${c.subtle('Show this help message')}`,
+  );
 
   lines.push('');
   lines.push(divider(50));

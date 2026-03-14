@@ -77,14 +77,16 @@ coder = "x"
     // The actual slugify regex: /[\s~^:?*\[\]\\]+/g
     // This regex does NOT match non-ASCII letters, so they pass through.
     function slugify(text: string): string {
-      return text
-        .toLowerCase()
-        .trim()
-        .replace(/[\s~^:?*[\]\\]+/g, '-')
-        .replace(/\.{2,}/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .replace(/-{2,}/g, '-')
-        .slice(0, 40) || 'task';
+      return (
+        text
+          .toLowerCase()
+          .trim()
+          .replace(/[\s~^:?*[\]\\]+/g, '-')
+          .replace(/\.{2,}/g, '-')
+          .replace(/^-+|-+$/g, '')
+          .replace(/-{2,}/g, '-')
+          .slice(0, 40) || 'task'
+      );
     }
 
     it('should preserve Chinese characters', () => {
@@ -143,8 +145,7 @@ coder = "x"
       // simple .startsWith check — no nested quantifiers, so no ReDoS.
       // We verify it completes quickly with a markdown plan containing
       // many asterisks in the description area.
-      const adversarialContent =
-        '### task-001: Test\n' + 'description: ' + '* '.repeat(100) + '\n';
+      const adversarialContent = '### task-001: Test\n' + 'description: ' + '* '.repeat(100) + '\n';
 
       const start = performance.now();
       const result = parsePlan(adversarialContent);

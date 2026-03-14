@@ -19,57 +19,63 @@ export const sessions = sqliteTable('sessions', {
 // ─── Chat Messages ──────────────────────────────────────
 // Full conversation history: user messages, agent responses,
 // system events, and feedback — all in one ordered stream.
-export const messages = sqliteTable('messages', {
-  id: text('id').primaryKey(), // nanoid
-  sessionId: text('session_id')
-    .notNull()
-    .references(() => sessions.id, { onDelete: 'cascade' }),
-  role: text('role').notNull(), // user | agent | system
-  content: text('content').notNull(), // message text
-  metadata: text('metadata'), // JSON: { agent: "claude-code", phase: "planning" } etc.
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-}, (table) => [
-  index('messages_session_id_idx').on(table.sessionId),
-]);
+export const messages = sqliteTable(
+  'messages',
+  {
+    id: text('id').primaryKey(), // nanoid
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    role: text('role').notNull(), // user | agent | system
+    content: text('content').notNull(), // message text
+    metadata: text('metadata'), // JSON: { agent: "claude-code", phase: "planning" } etc.
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  },
+  (table) => [index('messages_session_id_idx').on(table.sessionId)],
+);
 
 // ─── Tasks ──────────────────────────────────────────────
 // Individual coding tasks decomposed from the plan.
-export const tasks = sqliteTable('tasks', {
-  id: text('id').primaryKey(), // e.g. "task-001"
-  sessionId: text('session_id')
-    .notNull()
-    .references(() => sessions.id, { onDelete: 'cascade' }),
-  title: text('title').notNull(),
-  description: text('description').notNull(),
-  status: text('status').notNull(), // queued | running | reviewing | fixing | done | failed | blocked
-  dependsOn: text('depends_on'), // JSON array of task IDs
-  filesLikelyTouched: text('files_likely_touched'), // JSON array
-  acceptanceCriteria: text('acceptance_criteria'), // JSON array
-  branchName: text('branch_name'), // e.g. "sw/task-001-oauth-config"
-  reviewVerdict: text('review_verdict'), // approve | request_changes
-  reviewIssues: text('review_issues'), // JSON array of review issues
-  reviewCycles: integer('review_cycles').default(0),
-  diffPatch: text('diff_patch'), // stored diff after completion
-  agentOutput: text('agent_output'), // full agent response
-  order: integer('order').notNull(), // execution order
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
-}, (table) => [
-  index('tasks_session_id_idx').on(table.sessionId),
-]);
+export const tasks = sqliteTable(
+  'tasks',
+  {
+    id: text('id').primaryKey(), // e.g. "task-001"
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    description: text('description').notNull(),
+    status: text('status').notNull(), // queued | running | reviewing | fixing | done | failed | blocked
+    dependsOn: text('depends_on'), // JSON array of task IDs
+    filesLikelyTouched: text('files_likely_touched'), // JSON array
+    acceptanceCriteria: text('acceptance_criteria'), // JSON array
+    branchName: text('branch_name'), // e.g. "sw/task-001-oauth-config"
+    reviewVerdict: text('review_verdict'), // approve | request_changes
+    reviewIssues: text('review_issues'), // JSON array of review issues
+    reviewCycles: integer('review_cycles').default(0),
+    diffPatch: text('diff_patch'), // stored diff after completion
+    agentOutput: text('agent_output'), // full agent response
+    order: integer('order').notNull(), // execution order
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  },
+  (table) => [index('tasks_session_id_idx').on(table.sessionId)],
+);
 
 // ─── Feedback Iterations ────────────────────────────────
 // When user gives feedback after a build, each round is tracked.
-export const iterations = sqliteTable('iterations', {
-  id: text('id').primaryKey(), // nanoid
-  sessionId: text('session_id')
-    .notNull()
-    .references(() => sessions.id, { onDelete: 'cascade' }),
-  iterationNumber: integer('iteration_number').notNull(),
-  feedback: text('feedback').notNull(), // user's feedback text
-  planDelta: text('plan_delta'), // what changed in the plan (JSON)
-  status: text('status').notNull(), // planning | building | done | failed
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-}, (table) => [
-  index('iterations_session_id_idx').on(table.sessionId),
-]);
+export const iterations = sqliteTable(
+  'iterations',
+  {
+    id: text('id').primaryKey(), // nanoid
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    iterationNumber: integer('iteration_number').notNull(),
+    feedback: text('feedback').notNull(), // user's feedback text
+    planDelta: text('plan_delta'), // what changed in the plan (JSON)
+    status: text('status').notNull(), // planning | building | done | failed
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  },
+  (table) => [index('iterations_session_id_idx').on(table.sessionId)],
+);

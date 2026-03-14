@@ -10,9 +10,15 @@ if (process.env['NO_COLOR'] !== undefined) {
 // Used for the main title and key headings
 const noColor = process.env['NO_COLOR'] !== undefined;
 
-export const brandGradient: (s: string) => string = noColor ? (s) => s : gradient(['#6366f1', '#8b5cf6', '#a78bfa']);
-export const successGradient: (s: string) => string = noColor ? (s) => s : gradient(['#22c55e', '#4ade80']);
-export const warningGradient: (s: string) => string = noColor ? (s) => s : gradient(['#f59e0b', '#fbbf24']);
+export const brandGradient: (s: string) => string = noColor
+  ? (s) => s
+  : gradient(['#6366f1', '#8b5cf6', '#a78bfa']);
+export const successGradient: (s: string) => string = noColor
+  ? (s) => s
+  : gradient(['#22c55e', '#4ade80']);
+export const warningGradient: (s: string) => string = noColor
+  ? (s) => s
+  : gradient(['#f59e0b', '#fbbf24']);
 
 // ── Semantic colors ─────────────────────────────────────────────────
 export const c = {
@@ -149,8 +155,10 @@ export function progressBar(done: number, total: number, width: number): string 
 
   // Gradient colors based on percentage
   let filledColor: ChalkInstance;
-  if (pct < 0.33) filledColor = chalk.hex('#f87171'); // red
-  else if (pct < 0.66) filledColor = chalk.hex('#fbbf24'); // amber
+  if (pct < 0.33)
+    filledColor = chalk.hex('#f87171'); // red
+  else if (pct < 0.66)
+    filledColor = chalk.hex('#fbbf24'); // amber
   else filledColor = chalk.hex('#4ade80'); // green
 
   const bar = filledColor('█'.repeat(filled)) + c.muted('░'.repeat(empty));

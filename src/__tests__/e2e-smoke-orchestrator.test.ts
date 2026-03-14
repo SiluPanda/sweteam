@@ -7,23 +7,14 @@
  * the reviewer and parallel-runner for invalid config values.
  */
 import { describe, it, expect } from 'vitest';
-import {
-  safeJsonParse,
-  buildDag,
-  topologicalSort,
-  getReadyTasks,
-} from '../orchestrator/dag.js';
+import { safeJsonParse, buildDag, topologicalSort, getReadyTasks } from '../orchestrator/dag.js';
 import type { TaskRecord } from '../orchestrator/task-runner.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeTask(
-  id: string,
-  deps: string[] = [],
-  status: string = 'queued',
-): TaskRecord {
+function makeTask(id: string, deps: string[] = [], status: string = 'queued'): TaskRecord {
   return {
     id,
     sessionId: 's_smoke',
@@ -140,10 +131,7 @@ describe('buildDag — malformed dependsOn', () => {
 describe('topologicalSort — phantom dependencies', () => {
   it('completes sort when a task depends on a non-existent task', () => {
     // Task B depends on "phantom" which doesn't exist in the task list
-    const tasks = [
-      makeTask('t-a'),
-      makeTask('t-b', ['phantom']),
-    ];
+    const tasks = [makeTask('t-a'), makeTask('t-b', ['phantom'])];
     const dag = buildDag(tasks);
 
     // Should not throw — phantom dep is warned and skipped
@@ -157,11 +145,7 @@ describe('topologicalSort — phantom dependencies', () => {
 
   it('preserves valid ordering alongside phantom deps', () => {
     // t-c depends on t-a (valid) and phantom (invalid)
-    const tasks = [
-      makeTask('t-a'),
-      makeTask('t-b'),
-      makeTask('t-c', ['t-a', 'phantom']),
-    ];
+    const tasks = [makeTask('t-a'), makeTask('t-b'), makeTask('t-c', ['t-a', 'phantom'])];
     const dag = buildDag(tasks);
     const sorted = topologicalSort(dag);
 
@@ -172,10 +156,7 @@ describe('topologicalSort — phantom dependencies', () => {
 
   it('still detects real circular deps even when phantom deps exist', () => {
     // t-a -> t-b -> t-a is circular; phantom dep on t-b is a red herring
-    const tasks = [
-      makeTask('t-a', ['t-b']),
-      makeTask('t-b', ['t-a', 'phantom']),
-    ];
+    const tasks = [makeTask('t-a', ['t-b']), makeTask('t-b', ['t-a', 'phantom'])];
     const dag = buildDag(tasks);
 
     expect(() => topologicalSort(dag)).toThrow('Circular dependency');
@@ -189,10 +170,7 @@ describe('topologicalSort — phantom dependencies', () => {
 describe('getReadyTasks — phantom dependencies', () => {
   it('marks a task with only phantom deps as ready immediately', () => {
     // Task B depends on "phantom" which doesn't exist
-    const tasks = [
-      makeTask('t-a'),
-      makeTask('t-b', ['phantom']),
-    ];
+    const tasks = [makeTask('t-a'), makeTask('t-b', ['phantom'])];
     const dag = buildDag(tasks);
 
     const ready = getReadyTasks(dag, new Set(), new Set(), new Set(), new Set());
@@ -204,10 +182,7 @@ describe('getReadyTasks — phantom dependencies', () => {
 
   it('waits for valid deps but ignores phantom deps', () => {
     // Task C depends on t-a (valid) and phantom (invalid)
-    const tasks = [
-      makeTask('t-a'),
-      makeTask('t-c', ['t-a', 'phantom']),
-    ];
+    const tasks = [makeTask('t-a'), makeTask('t-c', ['t-a', 'phantom'])];
     const dag = buildDag(tasks);
 
     // Before t-a completes: t-c should not be ready (blocked by real dep)
@@ -221,9 +196,7 @@ describe('getReadyTasks — phantom dependencies', () => {
   });
 
   it('does not get stuck when all deps are phantom', () => {
-    const tasks = [
-      makeTask('t-x', ['ghost-1', 'ghost-2']),
-    ];
+    const tasks = [makeTask('t-x', ['ghost-1', 'ghost-2'])];
     const dag = buildDag(tasks);
 
     const ready = getReadyTasks(dag, new Set(), new Set(), new Set(), new Set());

@@ -113,23 +113,25 @@ export function createSessionHandlers(
       const session = getSession(sessionId);
       if (session?.status === 'building' || session?.status === 'iterating') {
         // Build or iteration is in progress — save message, user must resend as @feedback after build
+        console.log('A build is currently in progress. Your message has been saved.');
         console.log(
-          'A build is currently in progress. Your message has been saved.',
+          'Use @feedback after the build completes to apply changes, or @stop to cancel.\n',
         );
-        console.log('Use @feedback after the build completes to apply changes, or @stop to cancel.\n');
         addMessage(sessionId, 'user', text, { phase: 'feedback-pending' });
         return;
       }
       if (session?.status === 'awaiting_feedback') {
         // Already awaiting feedback — route directly to feedback handler in background
-        handleFeedback(sessionId, text, sessionImages.length > 0 ? sessionImages : undefined).catch((err) => {
-          try {
-            const msg = err instanceof Error ? err.message : String(err);
-            addMessage(sessionId, 'system', `Feedback failed: ${msg}`);
-          } catch (innerErr) {
-            console.error('Error in error handler:', innerErr);
-          }
-        });
+        handleFeedback(sessionId, text, sessionImages.length > 0 ? sessionImages : undefined).catch(
+          (err) => {
+            try {
+              const msg = err instanceof Error ? err.message : String(err);
+              addMessage(sessionId, 'system', `Feedback failed: ${msg}`);
+            } catch (innerErr) {
+              console.error('Error in error handler:', innerErr);
+            }
+          },
+        );
         await new Promise((r) => setTimeout(r, 300));
         return;
       }
@@ -165,11 +167,18 @@ export function createSessionHandlers(
         startedAt: Date.now(),
         lastActivityAt: Date.now(),
       });
-      invokePlanner(sessionId, repo, currentGoal, repoPath, (chunk) => {
-        writeEvent(sessionId, { type: 'output', id: plannerId, chunk });
-        const ps = plannerStates.get(sessionId);
-        if (ps) ps.lastActivityAt = Date.now();
-      }, sessionImages.length > 0 ? sessionImages : undefined)
+      invokePlanner(
+        sessionId,
+        repo,
+        currentGoal,
+        repoPath,
+        (chunk) => {
+          writeEvent(sessionId, { type: 'output', id: plannerId, chunk });
+          const ps = plannerStates.get(sessionId);
+          if (ps) ps.lastActivityAt = Date.now();
+        },
+        sessionImages.length > 0 ? sessionImages : undefined,
+      )
         .then((response) => {
           writeEvent(sessionId, { type: 'agent-end', id: plannerId, success: true });
 
@@ -294,24 +303,26 @@ export function createSessionHandlers(
 
       // During building/iterating, save the feedback — user must resend after build completes
       if (session?.status === 'building' || session?.status === 'iterating') {
+        console.log('A build is currently in progress. Your feedback has been saved.');
         console.log(
-          'A build is currently in progress. Your feedback has been saved.',
+          'Use @feedback after the build completes to apply changes, or @stop to cancel.\n',
         );
-        console.log('Use @feedback after the build completes to apply changes, or @stop to cancel.\n');
         addMessage(sessionId, 'user', text, { phase: 'feedback-pending' });
         return;
       }
 
       console.log('\nProcessing feedback...\n');
-      handleFeedback(sessionId, text, sessionImages.length > 0 ? sessionImages : undefined).catch((err) => {
-        try {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error(`Feedback processing failed: ${msg}`);
-          addMessage(sessionId, 'system', `Feedback failed: ${msg}`);
-        } catch (innerErr) {
-          console.error('Error in error handler:', innerErr);
-        }
-      });
+      handleFeedback(sessionId, text, sessionImages.length > 0 ? sessionImages : undefined).catch(
+        (err) => {
+          try {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`Feedback processing failed: ${msg}`);
+            addMessage(sessionId, 'system', `Feedback failed: ${msg}`);
+          } catch (innerErr) {
+            console.error('Error in error handler:', innerErr);
+          }
+        },
+      );
       // Give the feedback handler time to start writing events
       await new Promise((r) => setTimeout(r, 300));
     },

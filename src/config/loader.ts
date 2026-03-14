@@ -94,7 +94,9 @@ export function loadConfig(configPath?: string): SweteamConfig {
     const knownKeys = new Set(['agents', 'roles', 'execution', 'git']);
     for (const key of Object.keys(parsed)) {
       if (!knownKeys.has(key)) {
-        console.warn(`Warning: unknown config key "${key}" in ${effectivePath} — did you mean one of: ${[...knownKeys].join(', ')}?`);
+        console.warn(
+          `Warning: unknown config key "${key}" in ${effectivePath} — did you mean one of: ${[...knownKeys].join(', ')}?`,
+        );
       }
     }
 
@@ -119,7 +121,9 @@ export function loadConfig(configPath?: string): SweteamConfig {
   for (const role of roles) {
     const agentName = config.roles[role];
     if (agentName && !config.agents[agentName]) {
-      throw new Error(`Config error: role "${role}" references agent "${agentName}" which is not defined in [agents] section`);
+      throw new Error(
+        `Config error: role "${role}" references agent "${agentName}" which is not defined in [agents] section`,
+      );
     }
   }
 

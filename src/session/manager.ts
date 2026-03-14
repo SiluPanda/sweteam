@@ -20,14 +20,16 @@ function generateSessionId(): string {
 }
 
 function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[\s~^:?*[\]\\]+/g, '-')  // replace invalid git branch chars with dash
-    .replace(/\.{2,}/g, '-')             // replace consecutive dots
-    .replace(/^-+|-+$/g, '')             // trim leading/trailing dashes
-    .replace(/-{2,}/g, '-')              // collapse multiple dashes
-    .slice(0, 40) || 'task';             // fallback if empty
+  return (
+    text
+      .toLowerCase()
+      .trim()
+      .replace(/[\s~^:?*[\]\\]+/g, '-') // replace invalid git branch chars with dash
+      .replace(/\.{2,}/g, '-') // replace consecutive dots
+      .replace(/^-+|-+$/g, '') // trim leading/trailing dashes
+      .replace(/-{2,}/g, '-') // collapse multiple dashes
+      .slice(0, 40) || 'task'
+  ); // fallback if empty
 }
 
 export interface CreateSessionOpts {

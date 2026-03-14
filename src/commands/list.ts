@@ -1,15 +1,6 @@
 import { listSessionsEnriched, type EnrichedSession } from '../session/manager.js';
 import { relativeTime } from '../utils/time.js';
-import {
-  c,
-  border,
-  box,
-  statusBadge,
-  divider,
-  rPad,
-  vLen,
-  vTrunc,
-} from '../ui/theme.js';
+import { c, border, box, statusBadge, divider, rPad, vLen, vTrunc } from '../ui/theme.js';
 
 export function formatStatus(session: EnrichedSession): string {
   const { status, planReady, messageCount, tasksDone, tasksTotal, prNumber } = session;
@@ -69,7 +60,8 @@ export function formatSessionTable(sessionList: EnrichedSession[]): string {
   const bot = bdr(box.bottomLeft + box.horizontal.repeat(innerW) + box.bottomRight);
   const mid = bdr(box.teeLeft + box.horizontal.repeat(innerW) + box.teeRight);
 
-  const row = (content: string) => bdr(box.vertical) + '  ' + rPad(content, innerW - 2) + bdr(box.vertical);
+  const row = (content: string) =>
+    bdr(box.vertical) + '  ' + rPad(content, innerW - 2) + bdr(box.vertical);
 
   // Title
   const titleLine = row(c.primaryBold('sweteam Sessions'));

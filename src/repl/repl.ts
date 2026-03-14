@@ -533,144 +533,146 @@ export async function runRepl(opts?: ReplOptions): Promise<void> {
   process.stdout.on('resize', resizeHandler);
 
   try {
-  // Pre-activate session if provided
-  if (opts?.initialSession) {
-    const s = opts.initialSession;
-    const handlers = createSessionHandlers(s.id, s.repo, s.goal, s.repoLocalPath);
-    activeSession = {
-      id: s.id,
-      repo: s.repo,
-      repoPath: s.repoLocalPath,
-      handlers,
-    };
-    sidebar.setActiveSession(s.id);
-    if (opts.images && opts.images.length > 0) {
-      handlers.onImage(opts.images);
-    }
-    console.log(`Session ${s.id} active. Describe what you want to build.\n`);
-  }
-
-  while (true) {
-    const line = await promptLine({
-      prompt: getPrompt(),
-      getCompletions,
-      reservedRight: sidebar.width,
-    });
-
-    // ── Escape: leave session, go back to sweteam> ──
-    if (line === ESCAPE_SIGNAL) {
-      if (activeSession) {
-        const short = activeSession.repo.split('/').pop() || activeSession.id;
-        console.log(`Left session ${activeSession.id} (${short})`);
-        activeSession = null;
-        sidebar.setActiveSession(null);
+    // Pre-activate session if provided
+    if (opts?.initialSession) {
+      const s = opts.initialSession;
+      const handlers = createSessionHandlers(s.id, s.repo, s.goal, s.repoLocalPath);
+      activeSession = {
+        id: s.id,
+        repo: s.repo,
+        repoPath: s.repoLocalPath,
+        handlers,
+      };
+      sidebar.setActiveSession(s.id);
+      if (opts.images && opts.images.length > 0) {
+        handlers.onImage(opts.images);
       }
-      continue;
+      console.log(`Session ${s.id} active. Describe what you want to build.\n`);
     }
 
-    const trimmed = line.trim();
-    if (!trimmed) continue;
+    while (true) {
+      const line = await promptLine({
+        prompt: getPrompt(),
+        getCompletions,
+        reservedRight: sidebar.width,
+      });
 
-    // ── / commands always work ──
-    if (trimmed.startsWith('/')) {
-      const { command, args } = parseReplInput(trimmed);
-      if (command === '/exit' || command === '/quit') break;
-      try {
-        await dispatch(command, args);
-      } catch (err) {
-        console.error(friendlyError(err instanceof Error ? err.message : String(err)));
-      }
-      continue;
-    }
-
-    // ── @ commands: only in an active session ──
-    if (trimmed.startsWith('@')) {
-      if (!activeSession) {
-        console.log('No active session. Use /create or /enter first.');
+      // ── Escape: leave session, go back to sweteam> ──
+      if (line === ESCAPE_SIGNAL) {
+        if (activeSession) {
+          const short = activeSession.repo.split('/').pop() || activeSession.id;
+          console.log(`Left session ${activeSession.id} (${short})`);
+          activeSession = null;
+          sidebar.setActiveSession(null);
+        }
         continue;
       }
 
-      // @cancel — cancel in-flight planner
-      if (trimmed === '@cancel') {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // ── / commands always work ──
+      if (trimmed.startsWith('/')) {
+        const { command, args } = parseReplInput(trimmed);
+        if (command === '/exit' || command === '/quit') break;
         try {
-          await handleSessionCommand(trimmed, activeSession.handlers);
+          await dispatch(command, args);
         } catch (err) {
           console.error(friendlyError(err instanceof Error ? err.message : String(err)));
         }
         continue;
       }
 
-      // @watch — re-attach to live agent output
-      if (trimmed === '@watch') {
-        if (isLogActive(activeSession.id) || hasActiveProcesses(activeSession.id)) {
-          console.log('Attaching to live output... (press Enter or Escape to detach)\n');
-          await watchBuildLive(activeSession.id);
-          const { getSession: gs } = await import('../session/manager.js');
-          const updated = gs(activeSession.id);
-          if (updated?.status === 'awaiting_feedback') {
-            console.log('Build complete. Send feedback or @feedback <text>.\n');
-          }
-        } else {
-          console.log('No active agent output. Use @status to check progress.');
+      // ── @ commands: only in an active session ──
+      if (trimmed.startsWith('@')) {
+        if (!activeSession) {
+          console.log('No active session. Use /create or /enter first.');
+          continue;
         }
-        continue;
-      }
 
-      try {
-        const stopped = await handleSessionCommand(trimmed, activeSession.handlers);
-        if (stopped) {
-          activeSession = null;
-          sidebar.setActiveSession(null);
-          sidebar.invalidate();
+        // @cancel — cancel in-flight planner
+        if (trimmed === '@cancel') {
+          try {
+            await handleSessionCommand(trimmed, activeSession.handlers);
+          } catch (err) {
+            console.error(friendlyError(err instanceof Error ? err.message : String(err)));
+          }
+          continue;
         }
-        // After @build or @feedback, auto-attach to live output
-        if ((trimmed === '@build' || trimmed.startsWith('@feedback ')) && activeSession) {
+
+        // @watch — re-attach to live agent output
+        if (trimmed === '@watch') {
           if (isLogActive(activeSession.id) || hasActiveProcesses(activeSession.id)) {
-            console.log('Watching output... (press Escape to background)\n');
+            console.log('Attaching to live output... (press Enter or Escape to detach)\n');
             await watchBuildLive(activeSession.id);
-            // Re-check session status after watching
             const { getSession: gs } = await import('../session/manager.js');
             const updated = gs(activeSession.id);
             if (updated?.status === 'awaiting_feedback') {
               console.log('Build complete. Send feedback or @feedback <text>.\n');
-            } else if (updated?.status === 'building' || updated?.status === 'iterating') {
-              console.log(getStatusDisplay(activeSession.id));
-              console.log('\nBuild running in background. Type @status to check progress.\n');
+            }
+          } else {
+            console.log('No active agent output. Use @status to check progress.');
+          }
+          continue;
+        }
+
+        try {
+          const stopped = await handleSessionCommand(trimmed, activeSession.handlers);
+          if (stopped) {
+            activeSession = null;
+            sidebar.setActiveSession(null);
+            sidebar.invalidate();
+          }
+          // After @build or @feedback, auto-attach to live output
+          if ((trimmed === '@build' || trimmed.startsWith('@feedback ')) && activeSession) {
+            if (isLogActive(activeSession.id) || hasActiveProcesses(activeSession.id)) {
+              console.log('Watching output... (press Escape to background)\n');
+              await watchBuildLive(activeSession.id);
+              // Re-check session status after watching
+              const { getSession: gs } = await import('../session/manager.js');
+              const updated = gs(activeSession.id);
+              if (updated?.status === 'awaiting_feedback') {
+                console.log('Build complete. Send feedback or @feedback <text>.\n');
+              } else if (updated?.status === 'building' || updated?.status === 'iterating') {
+                console.log(getStatusDisplay(activeSession.id));
+                console.log('\nBuild running in background. Type @status to check progress.\n');
+              }
             }
           }
+        } catch (err) {
+          console.error(friendlyError(err instanceof Error ? err.message : String(err)));
         }
-      } catch (err) {
-        console.error(friendlyError(err instanceof Error ? err.message : String(err)));
+        continue;
       }
-      continue;
-    }
 
-    // ── Plain text: send to planner if session is active ──
-    if (activeSession) {
-      try {
-        await activeSession.handlers.onMessage(trimmed);
-        // Auto-attach to live output (planner or feedback running in background)
-        if (activeSession && (isLogActive(activeSession.id) || hasActiveProcesses(activeSession.id))) {
-          await watchBuildLive(activeSession.id);
-          // Show status-appropriate message after watcher detaches
-          if (activeSession) {
-            const updated = getSession(activeSession.id);
-            if (updated?.status === 'awaiting_feedback') {
-              console.log('Build complete. Send feedback or @feedback <text>.\n');
-            } else if (updated?.status === 'planning' && updated?.planJson) {
-              // Display the planner's response so the user can see the plan
-              console.log('\n' + updated.planJson + '\n');
+      // ── Plain text: send to planner if session is active ──
+      if (activeSession) {
+        try {
+          await activeSession.handlers.onMessage(trimmed);
+          // Auto-attach to live output (planner or feedback running in background)
+          if (
+            activeSession &&
+            (isLogActive(activeSession.id) || hasActiveProcesses(activeSession.id))
+          ) {
+            await watchBuildLive(activeSession.id);
+            // Show status-appropriate message after watcher detaches
+            if (activeSession) {
+              const updated = getSession(activeSession.id);
+              if (updated?.status === 'awaiting_feedback') {
+                console.log('Build complete. Send feedback or @feedback <text>.\n');
+              } else if (updated?.status === 'planning' && updated?.planJson) {
+                // Display the planner's response so the user can see the plan
+                console.log('\n' + updated.planJson + '\n');
+              }
             }
           }
+        } catch (err) {
+          console.error(friendlyError(err instanceof Error ? err.message : String(err)));
         }
-      } catch (err) {
-        console.error(friendlyError(err instanceof Error ? err.message : String(err)));
+      } else {
+        console.log('No active session. Use /create or /enter to start one.');
       }
-    } else {
-      console.log('No active session. Use /create or /enter to start one.');
     }
-  }
-
   } finally {
     process.stdout.removeListener('resize', resizeHandler);
     sidebar.stop();
