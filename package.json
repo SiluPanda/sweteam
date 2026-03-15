@@ -1,6 +1,6 @@
 {
   "name": "sweteam",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "Autonomous coding agent orchestrator — turns high-level goals into PR'd code",
   "type": "module",
   "bin": {
@@ -24,6 +24,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "web": "tsx src/web/server.ts",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

@@ -89,40 +89,45 @@ The key ideas:
 
 sweteam doesn't replace your coding agents. It gives them the same structure that makes real engineering teams ship reliable code.
 
-## Terminal UI
+## Web Dashboard
 
-When you launch `sweteam`, you're greeted with an interactive REPL:
+Monitor all your sessions, tasks, and agent output from a browser-based dashboard:
 
-```
-╭─── sweteam v0.8.0 ────────────────────────────────────────────╮
-│                                │                              │
-│    Welcome to sweteam!         │ Getting started              │
-│                                │ /create [repo]  Start new    │
-│      ┌─────────────────┐       │ /list           See all      │
-│      │    ◉       ◉    │       │ /enter <id>     Resume       │
-│      │    ─────────    │       │ ──────────────────────────── │
-│      └─────────────────┘       │ Recent sessions              │
-│                                │ s_a1b2c3d4 Add dark theme    │
-│  Orchestrator · v0.8.0         │ s_e5f6g7h8 Fix auth flow     │
-│  ~/projects/myrepo             │                              │
-╰───────────────────────────────────────────────────────────────╯
-
-sweteam>
+```bash
+npm run web
+# → http://localhost:3847
 ```
 
-Inside a session, agents stream their work in real time:
+### Session list
+
+Browse all sessions at a glance — status badges, task progress bars, and timestamps.
+
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" alt="sweteam web dashboard" width="100%" />
+</p>
+
+### Session detail
+
+Click into any session to see the full conversation timeline, task breakdown, progress ring, and PR link.
+
+<p align="center">
+  <img src="docs/screenshots/session-detail.png" alt="sweteam session detail view" width="100%" />
+</p>
+
+### Terminal REPL
+
+The CLI also includes an interactive REPL with agent output streaming in real time:
 
 ```
 ▶ Coder ─ task-001: Add ThemeConfig and color definitions
 ──────────────────────────────────────────────────────────
 │ Creating src/theme/config.ts with color palette...
 │ Adding ThemeConfig interface with light/dark variants...
-│ Defining CSS custom properties for runtime switching...
 ✓ Coder completed
 
 ▶ Reviewer ─ task-001: Add ThemeConfig and color definitions
 ──────────────────────────────────────────────────────────
-│ Checking diff against acceptance criteria...
+│ Reviewing diff against acceptance criteria...
 │ All criteria met. Approving.
 ✓ Reviewer completed
 ```
@@ -311,6 +316,7 @@ Attaching to live build output... (press Enter to detach)
 | Command                       | Description                            |
 | ----------------------------- | -------------------------------------- |
 | `sweteam`                     | Launch interactive REPL                |
+| `sweteam web`                 | Start the web dashboard (port 3847)    |
 | `sweteam init`                | Auto-discover CLIs and generate config |
 | `sweteam create [repo]`       | Create a new session                   |
 | `sweteam list`                | List all sessions                      |
@@ -555,6 +561,7 @@ src/
 ├── config/                  # Config loader and GitHub auth
 ├── git/                     # Git and GitHub CLI wrappers
 ├── ui/                      # Terminal UI (banner, prompt, agent panel, sidebar, markdown, theme)
+├── web/                     # Web dashboard (HTTP server + single-page UI)
 ├── db/                      # SQLite schema and client (Drizzle ORM)
 ├── utils/                   # Utility functions (time formatting)
 └── __tests__/               # Test suite

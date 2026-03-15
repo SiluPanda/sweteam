@@ -1,0 +1,1535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>sweteam — Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ─── Reset ──────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0a0e1a;
+      color: #c8d6e5;
+      line-height: 1.5;
+      font-size: 14px;
+    }
+    code, pre { font-family: 'JetBrains Mono', monospace; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+    /* ─── Color tokens ───────────────────────────────── */
+    :root {
+      --bg-base: #0a0e1a;
+      --bg-surface: #0f172a;
+      --bg-elevated: #1e293b;
+      --bg-hover: #1a2332;
+      --border: #1e293b;
+      --border-active: #3b82f6;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --brand-indigo: #818cf8;
+      --brand-violet: #a78bfa;
+      --brand-blue: #3b82f6;
+      --status-planning: #38bdf8;
+      --status-building: #fbbf24;
+      --status-feedback: #4ade80;
+      --status-iterating: #f472b6;
+      --status-stopped: #f87171;
+      --task-queued: #6b7280;
+      --task-running: #38bdf8;
+      --task-reviewing: #a78bfa;
+      --task-fixing: #fb923c;
+      --task-done: #4ade80;
+      --task-failed: #f87171;
+      --task-blocked: #6b7280;
+      --task-cancelled: #6b7280;
+    }
+
+    /* ─── Layout ─────────────────────────────────────── */
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .header {
+      height: 52px;
+      background: var(--bg-base);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .header-brand .mascot-mini {
+      width: 32px;
+      height: 26px;
+    }
+
+    .header-brand .brand-name {
+      font-size: 16px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.02em;
+    }
+
+    .header-stats {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-left: auto;
+    }
+
+    .header-stat {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .header-stat .stat-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    .header-stat .stat-value {
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
+    .panels {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ─── Left Panel ─────────────────────────────────── */
+    .left-panel {
+      width: 272px;
+      background: var(--bg-base);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .panel-header {
+      padding: 16px 16px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .panel-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+    }
+
+    .panel-action {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      font-size: 14px;
+      line-height: 1;
+      transition: all 0.15s;
+    }
+    .panel-action:hover {
+      color: var(--text-secondary);
+      background: var(--bg-elevated);
+    }
+
+    .session-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 8px 8px;
+    }
+
+    .session-card {
+      padding: 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      margin-bottom: 4px;
+      transition: all 0.15s;
+      position: relative;
+    }
+    .session-card:hover {
+      background: var(--bg-hover);
+    }
+    .session-card.active {
+      background: var(--bg-surface);
+      border-color: var(--border);
+    }
+    .session-card.active::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 8px;
+      bottom: 8px;
+      width: 3px;
+      border-radius: 0 2px 2px 0;
+      background: var(--brand-indigo);
+    }
+
+    .session-card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .status-dot.planning { background: var(--status-planning); box-shadow: 0 0 6px var(--status-planning); }
+    .status-dot.building { background: var(--status-building); box-shadow: 0 0 6px var(--status-building); animation: pulse 2s ease-in-out infinite; }
+    .status-dot.awaiting_feedback { background: var(--status-feedback); box-shadow: 0 0 6px var(--status-feedback); }
+    .status-dot.iterating { background: var(--status-iterating); box-shadow: 0 0 6px var(--status-iterating); animation: pulse 2s ease-in-out infinite; }
+    .status-dot.stopped { background: var(--status-stopped); opacity: 0.6; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .session-repo {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+
+    .session-goal {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      line-height: 1.4;
+      margin-bottom: 8px;
+    }
+
+    .session-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .status-badge.planning { background: rgba(56,189,248,0.12); color: var(--status-planning); }
+    .status-badge.building { background: rgba(251,191,36,0.12); color: var(--status-building); }
+    .status-badge.awaiting_feedback { background: rgba(74,222,128,0.12); color: var(--status-feedback); }
+    .status-badge.iterating { background: rgba(244,114,182,0.12); color: var(--status-iterating); }
+    .status-badge.stopped { background: rgba(248,113,113,0.12); color: var(--status-stopped); }
+
+    .session-time {
+      font-size: 11px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .session-progress {
+      margin-top: 8px;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 3px;
+      background: var(--bg-elevated);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+
+    .progress-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 3px;
+      text-align: right;
+    }
+
+    /* ─── Center Panel ───────────────────────────────── */
+    .center-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-surface);
+      min-width: 0;
+    }
+
+    .center-header {
+      padding: 16px 20px 0;
+      flex-shrink: 0;
+    }
+
+    .session-info {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .session-info-left h2 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .session-info-details {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .session-detail {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .session-detail code {
+      background: var(--bg-elevated);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .session-actions {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .btn {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+    }
+    .btn:hover {
+      background: #334155;
+      color: var(--text-primary);
+      border-color: #475569;
+    }
+    .btn-danger {
+      border-color: rgba(248,113,113,0.3);
+      color: var(--status-stopped);
+    }
+    .btn-danger:hover {
+      background: rgba(248,113,113,0.12);
+      border-color: rgba(248,113,113,0.5);
+    }
+    .btn-primary {
+      background: var(--brand-blue);
+      border-color: var(--brand-blue);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: #2563eb;
+      border-color: #2563eb;
+    }
+
+    /* Tabs */
+    .tab-bar {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tab {
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .tab:hover { color: var(--text-secondary); }
+    .tab.active {
+      color: var(--brand-indigo);
+      border-bottom-color: var(--brand-indigo);
+    }
+
+    .tab-count {
+      font-size: 11px;
+      background: var(--bg-elevated);
+      padding: 1px 6px;
+      border-radius: 8px;
+      margin-left: 6px;
+      color: var(--text-muted);
+    }
+
+    /* Center content */
+    .center-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px;
+    }
+
+    /* ─── Messages View ──────────────────────────────── */
+    .message {
+      margin-bottom: 12px;
+      display: flex;
+      gap: 10px;
+    }
+
+    .message-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .message-avatar.user { background: rgba(59,130,246,0.15); color: var(--brand-blue); }
+    .message-avatar.agent { background: rgba(129,140,248,0.15); color: var(--brand-indigo); }
+    .message-avatar.system { background: rgba(100,116,139,0.15); color: var(--text-muted); }
+
+    .message-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .message-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .message-role {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      text-transform: capitalize;
+    }
+
+    .message-time {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .message-content {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .message-content code {
+      background: var(--bg-elevated);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 12px;
+      color: #93c5fd;
+    }
+
+    .message-content pre {
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin: 8px 0;
+      overflow-x: auto;
+      font-size: 12px;
+      color: #e2e8f0;
+    }
+
+    /* ─── Task Cards ─────────────────────────────────── */
+    .task-card {
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 8px;
+      transition: border-color 0.15s;
+    }
+    .task-card:hover { border-color: #334155; }
+
+    .task-card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+
+    .task-status-icon {
+      font-size: 14px;
+      flex-shrink: 0;
+      width: 20px;
+      text-align: center;
+    }
+
+    .task-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      flex: 1;
+    }
+
+    .task-status-label {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .task-status-label.queued { background: rgba(107,114,128,0.15); color: var(--task-queued); }
+    .task-status-label.running { background: rgba(56,189,248,0.12); color: var(--task-running); }
+    .task-status-label.reviewing { background: rgba(167,139,250,0.12); color: var(--task-reviewing); }
+    .task-status-label.fixing { background: rgba(251,146,60,0.12); color: var(--task-fixing); }
+    .task-status-label.done { background: rgba(74,222,128,0.12); color: var(--task-done); }
+    .task-status-label.failed { background: rgba(248,113,113,0.12); color: var(--task-failed); }
+    .task-status-label.blocked { background: rgba(107,114,128,0.15); color: var(--task-blocked); }
+    .task-status-label.cancelled { background: rgba(107,114,128,0.15); color: var(--task-cancelled); }
+
+    .task-description {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-left: 30px;
+      line-height: 1.5;
+    }
+
+    .task-files {
+      margin: 8px 0 0 30px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .task-file-tag {
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    .task-review {
+      margin: 8px 0 0 30px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* ─── Plan View ──────────────────────────────────── */
+    .plan-content {
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+
+    .plan-content pre {
+      background: transparent;
+      border: none;
+      padding: 0;
+      margin: 0;
+      font-size: 13px;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.6;
+    }
+
+    /* ─── Right Panel ────────────────────────────────── */
+    .right-panel {
+      width: 300px;
+      background: var(--bg-base);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow-y: auto;
+    }
+
+    .detail-section {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .detail-section:last-child { border-bottom: none; }
+
+    .detail-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .detail-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      padding: 4px 0;
+    }
+
+    .detail-label {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .detail-value {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 500;
+      text-align: right;
+      max-width: 160px;
+      word-break: break-all;
+    }
+
+    .detail-value a {
+      color: var(--brand-blue);
+      text-decoration: none;
+    }
+    .detail-value a:hover {
+      text-decoration: underline;
+    }
+
+    /* Task mini list in right panel */
+    .task-mini {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+    }
+
+    .task-mini-icon {
+      font-size: 12px;
+      width: 16px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .task-mini-title {
+      font-size: 12px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+
+    .task-mini-status {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 8px;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
+    /* Iteration cards */
+    .iteration-card {
+      background: var(--bg-surface);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 6px;
+    }
+
+    .iteration-header {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .iteration-feedback {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* ─── Progress Ring ──────────────────────────────── */
+    .progress-ring-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .progress-ring {
+      width: 48px;
+      height: 48px;
+      flex-shrink: 0;
+    }
+
+    .progress-ring circle {
+      fill: none;
+      stroke-width: 4;
+      stroke-linecap: round;
+    }
+
+    .progress-ring .ring-bg {
+      stroke: var(--bg-elevated);
+    }
+
+    .progress-ring .ring-fill {
+      transition: stroke-dashoffset 0.4s ease;
+    }
+
+    .progress-stats {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .progress-pct {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .progress-detail {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* ─── Empty State ────────────────────────────────── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      padding: 40px;
+      text-align: center;
+    }
+
+    .empty-mascot {
+      width: 160px;
+      height: 130px;
+      margin-bottom: 24px;
+      opacity: 0.7;
+    }
+
+    .empty-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .empty-text {
+      font-size: 13px;
+      color: var(--text-muted);
+      max-width: 320px;
+      line-height: 1.6;
+    }
+
+    .empty-hint {
+      margin-top: 20px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .empty-hint .prompt { color: var(--brand-blue); }
+
+    /* ─── No sessions state ──────────────────────────── */
+    .no-sessions {
+      padding: 40px 16px;
+      text-align: center;
+    }
+
+    .no-sessions p {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+
+    /* ─── Diff view ──────────────────────────────────── */
+    .diff-block {
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .diff-header {
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      background: rgba(30,41,59,0.5);
+      border-bottom: 1px solid var(--border);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .diff-body {
+      padding: 8px 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      overflow-x: auto;
+    }
+
+    .diff-line {
+      padding: 0 14px;
+      white-space: pre;
+    }
+    .diff-line.add { background: rgba(74,222,128,0.08); color: #4ade80; }
+    .diff-line.remove { background: rgba(248,113,113,0.08); color: #f87171; }
+    .diff-line.hunk { color: var(--brand-violet); font-weight: 600; }
+    .diff-line.context { color: var(--text-muted); }
+
+    /* ─── Mascot animations (reused from landing page) ─ */
+    @keyframes pupilLookAround {
+      0%, 100% { transform: translate(0, 0); }
+      10% { transform: translate(6px, -3px); }
+      30% { transform: translate(6px, 4px); }
+      50% { transform: translate(-6px, 4px); }
+      70% { transform: translate(-6px, -4px); }
+      90% { transform: translate(3px, -5px); }
+    }
+    @keyframes blink {
+      0%, 42%, 44%, 92%, 94%, 100% { transform: scaleY(1); }
+      43%, 93% { transform: scaleY(0.05); }
+    }
+    @keyframes floatBounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+    .mascot-group { animation: floatBounce 3s ease-in-out infinite; }
+    .mascot-pupil { animation: pupilLookAround 4s ease-in-out infinite; }
+    .mascot-eye-group { transform-origin: center; animation: blink 4s ease-in-out infinite; }
+
+    /* ─── Utility ────────────────────────────────────── */
+    .fade-in { animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .spin { animation: spin 1s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    .loading-spinner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      color: var(--text-muted);
+      font-size: 13px;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-brand">
+      <svg class="mascot-mini" viewBox="0 0 180 160" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="hdrBorder" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#6366f1" />
+            <stop offset="100%" style="stop-color:#a78bfa" />
+          </linearGradient>
+          <linearGradient id="hdrScreen" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#1e3a5f" />
+            <stop offset="100%" style="stop-color:#0f172a" />
+          </linearGradient>
+        </defs>
+        <g class="mascot-group">
+          <rect x="78" y="132" width="24" height="10" rx="2" fill="#334155"/>
+          <rect x="62" y="140" width="56" height="6" rx="3" fill="#334155"/>
+          <rect x="18" y="12" width="144" height="118" rx="12" fill="url(#hdrBorder)"/>
+          <rect x="22" y="16" width="136" height="110" rx="10" fill="url(#hdrScreen)"/>
+          <g class="mascot-left-eye"><g class="mascot-eye-group">
+            <ellipse cx="65" cy="65" rx="18" ry="20" fill="#e2e8f0"/>
+            <g class="mascot-pupil"><circle cx="65" cy="65" r="9" fill="#1e293b"/></g>
+            <circle cx="60" cy="59" r="3" fill="white" opacity="0.8"/>
+          </g></g>
+          <g class="mascot-right-eye"><g class="mascot-eye-group">
+            <ellipse cx="115" cy="65" rx="18" ry="20" fill="#e2e8f0"/>
+            <g class="mascot-pupil"><circle cx="115" cy="65" r="9" fill="#1e293b"/></g>
+            <circle cx="110" cy="59" r="3" fill="white" opacity="0.8"/>
+          </g></g>
+          <path d="M 72 100 Q 90 118 108 100" stroke="#f1f5f9" stroke-width="3" fill="none" stroke-linecap="round"/>
+          <circle cx="90" cy="18" r="3" fill="#10b981"><animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite"/></circle>
+        </g>
+      </svg>
+      <span class="brand-name">sweteam</span>
+    </div>
+    <div class="header-stats" id="header-stats"></div>
+  </div>
+
+  <!-- Panels -->
+  <div class="panels">
+    <!-- Left: Session List -->
+    <div class="left-panel">
+      <div class="panel-header">
+        <span class="panel-title">Sessions</span>
+        <button class="panel-action" id="refresh-btn" title="Refresh">⟳</button>
+      </div>
+      <div class="session-list" id="session-list"></div>
+    </div>
+
+    <!-- Center: Main Content -->
+    <div class="center-panel" id="center-panel">
+      <div class="empty-state" id="empty-state">
+        <svg class="empty-mascot" viewBox="0 0 180 160" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="emBorder" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#3b82f6">
+                <animate attributeName="stop-color" values="#3b82f6;#8b5cf6;#ec4899;#f59e0b;#10b981;#3b82f6" dur="6s" repeatCount="indefinite"/>
+              </stop>
+              <stop offset="100%" style="stop-color:#60a5fa">
+                <animate attributeName="stop-color" values="#60a5fa;#a78bfa;#f472b6;#fbbf24;#34d399;#60a5fa" dur="6s" repeatCount="indefinite"/>
+              </stop>
+            </linearGradient>
+            <linearGradient id="emScreen" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#1e3a5f">
+                <animate attributeName="stop-color" values="#1e3a5f;#2d1b69;#1b4332;#1e3a5f" dur="8s" repeatCount="indefinite"/>
+              </stop>
+              <stop offset="100%" style="stop-color:#0f172a" />
+            </linearGradient>
+            <filter id="emGlow"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <g class="mascot-group">
+            <rect x="78" y="132" width="24" height="10" rx="2" fill="#334155"/>
+            <rect x="62" y="140" width="56" height="6" rx="3" fill="#334155"/>
+            <rect x="18" y="12" width="144" height="118" rx="12" fill="url(#emBorder)"/>
+            <rect x="22" y="16" width="136" height="110" rx="10" fill="url(#emScreen)"/>
+            <rect x="26" y="20" width="128" height="50" rx="8" fill="rgba(255,255,255,0.03)"/>
+            <g class="mascot-left-eye"><g class="mascot-eye-group">
+              <ellipse cx="65" cy="65" rx="18" ry="20" fill="#e2e8f0"/>
+              <ellipse cx="65" cy="65" rx="16" ry="18" fill="#f1f5f9"/>
+              <g class="mascot-pupil"><circle cx="65" cy="65" r="9" fill="#1e293b"/><circle cx="65" cy="63" r="5" fill="#0f172a"/></g>
+              <circle cx="60" cy="59" r="3" fill="white" opacity="0.8"/>
+            </g></g>
+            <g class="mascot-right-eye"><g class="mascot-eye-group">
+              <ellipse cx="115" cy="65" rx="18" ry="20" fill="#e2e8f0"/>
+              <ellipse cx="115" cy="65" rx="16" ry="18" fill="#f1f5f9"/>
+              <g class="mascot-pupil"><circle cx="115" cy="65" r="9" fill="#1e293b"/><circle cx="115" cy="63" r="5" fill="#0f172a"/></g>
+              <circle cx="110" cy="59" r="3" fill="white" opacity="0.8"/>
+            </g></g>
+            <path d="M 72 100 Q 90 118 108 100" stroke="#f1f5f9" stroke-width="3" fill="none" stroke-linecap="round"/>
+            <ellipse cx="48" cy="98" rx="10" ry="6" fill="#f472b6" opacity="0.15"/>
+            <ellipse cx="132" cy="98" rx="10" ry="6" fill="#f472b6" opacity="0.15"/>
+            <g filter="url(#emGlow)">
+              <polygon points="10,25 12,20 14,25 12,30" fill="#fbbf24" opacity="0.6"/>
+              <polygon points="168,35 170,30 172,35 170,40" fill="#a78bfa" opacity="0.6"/>
+              <circle cx="8" cy="90" r="3" fill="#34d399" opacity="0.5"/>
+              <polygon points="170,100 172,95 174,100 172,105" fill="#f472b6" opacity="0.5"/>
+            </g>
+            <circle cx="90" cy="18" r="3" fill="#10b981"><animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite"/></circle>
+          </g>
+        </svg>
+        <div class="empty-title">Select a session</div>
+        <div class="empty-text">
+          Choose a session from the left panel to view its progress, messages, and tasks.
+        </div>
+        <div class="empty-hint">
+          <span class="prompt">$</span> sweteam create owner/repo
+        </div>
+      </div>
+      <div id="session-view" style="display:none;height:100%;flex-direction:column;">
+        <div class="center-header">
+          <div class="session-info">
+            <div class="session-info-left">
+              <h2 id="sv-title"></h2>
+              <div class="session-info-details" id="sv-details"></div>
+            </div>
+            <div class="session-actions" id="sv-actions"></div>
+          </div>
+          <div class="tab-bar" id="tab-bar">
+            <div class="tab active" data-tab="conversation">Conversation</div>
+            <div class="tab" data-tab="tasks">Tasks</div>
+            <div class="tab" data-tab="plan">Plan</div>
+            <div class="tab" data-tab="diff">Diff</div>
+          </div>
+        </div>
+        <div class="center-content" id="center-content"></div>
+      </div>
+    </div>
+
+    <!-- Right: Details -->
+    <div class="right-panel" id="right-panel">
+      <div class="detail-section" style="padding:40px 16px;text-align:center;">
+        <p style="font-size:12px;color:var(--text-muted);">Select a session to view details</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────
+const state = {
+  sessions: [],
+  selectedId: null,
+  session: null,
+  tasks: [],
+  messages: [],
+  iterations: [],
+  activeTab: 'conversation',
+};
+
+// ── API ───────────────────────────────────────────────────
+async function api(path) {
+  const res = await fetch('/api/' + path);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+async function fetchSessions() {
+  state.sessions = await api('sessions');
+  renderSessionList();
+  renderHeaderStats();
+  // If selected session exists, refresh it
+  if (state.selectedId) {
+    const found = state.sessions.find(s => s.id === state.selectedId);
+    if (found && state.session) {
+      // Check if status changed
+      if (found.status !== state.session.status || found.tasksTotal !== state.session.tasksTotal) {
+        await selectSession(state.selectedId, true);
+      }
+    }
+  }
+}
+
+async function selectSession(id, force) {
+  if (!force && state.selectedId === id) return;
+  state.selectedId = id;
+  state.session = await api('sessions/' + id);
+  state.tasks = await api('sessions/' + id + '/tasks');
+  state.messages = await api('sessions/' + id + '/messages');
+  state.iterations = await api('sessions/' + id + '/iterations');
+  renderSessionList();
+  renderSessionView();
+  renderRightPanel();
+}
+
+async function stopSession(id) {
+  await fetch('/api/sessions/' + id + '/stop', { method: 'POST' });
+  await fetchSessions();
+  if (state.selectedId === id) {
+    await selectSession(id, true);
+  }
+}
+
+// ── Time helpers ──────────────────────────────────────────
+function timeAgo(ts) {
+  if (!ts) return '';
+  const d = typeof ts === 'number' ? ts : new Date(ts).getTime();
+  const diff = Date.now() - d;
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60) return sec + 's ago';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return min + 'm ago';
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return hr + 'h ago';
+  const days = Math.floor(hr / 24);
+  return days + 'd ago';
+}
+
+function formatTime(ts) {
+  if (!ts) return '—';
+  const d = new Date(typeof ts === 'number' ? ts : ts);
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// ── Status helpers ────────────────────────────────────────
+const STATUS_ICONS = {
+  planning: '◈', building: '⚡', awaiting_feedback: '◆', iterating: '↻', stopped: '■'
+};
+const STATUS_LABELS = {
+  planning: 'Planning', building: 'Building', awaiting_feedback: 'Feedback', iterating: 'Iterating', stopped: 'Stopped'
+};
+const TASK_ICONS = {
+  queued: '○', running: '▶', reviewing: '⟳', fixing: '⚙', done: '✓', failed: '✗', blocked: '⊘', cancelled: '—'
+};
+
+function statusColor(status) {
+  const map = {
+    planning: 'var(--status-planning)', building: 'var(--status-building)',
+    awaiting_feedback: 'var(--status-feedback)', iterating: 'var(--status-iterating)',
+    stopped: 'var(--status-stopped)'
+  };
+  return map[status] || 'var(--text-muted)';
+}
+
+function taskColor(status) {
+  return 'var(--task-' + status + ')';
+}
+
+function progressColor(pct) {
+  if (pct < 0.33) return 'var(--status-stopped)';
+  if (pct < 0.66) return 'var(--status-building)';
+  return 'var(--status-feedback)';
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ── Render: Header Stats ──────────────────────────────────
+function renderHeaderStats() {
+  const el = document.getElementById('header-stats');
+  const total = state.sessions.length;
+  const active = state.sessions.filter(s => s.status !== 'stopped').length;
+  const building = state.sessions.filter(s => s.status === 'building' || s.status === 'iterating').length;
+
+  el.innerHTML = `
+    <div class="header-stat">
+      <span class="stat-value">${total}</span> sessions
+    </div>
+    <div class="header-stat">
+      <span class="stat-dot" style="background:var(--status-feedback)"></span>
+      <span class="stat-value">${active}</span> active
+    </div>
+    ${building ? `<div class="header-stat">
+      <span class="stat-dot" style="background:var(--status-building);animation:pulse 2s ease-in-out infinite"></span>
+      <span class="stat-value">${building}</span> in progress
+    </div>` : ''}
+  `;
+}
+
+// ── Render: Session List ──────────────────────────────────
+function renderSessionList() {
+  const el = document.getElementById('session-list');
+
+  if (state.sessions.length === 0) {
+    el.innerHTML = `<div class="no-sessions">
+      <div style="font-size:24px;margin-bottom:8px;opacity:0.5;">◈</div>
+      <p>No sessions yet</p>
+      <p style="margin-top:4px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-muted);">
+        sweteam create owner/repo
+      </p>
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = state.sessions.map(s => {
+    const isActive = s.id === state.selectedId;
+    const pct = s.tasksTotal > 0 ? s.tasksDone / s.tasksTotal : 0;
+    const repoShort = s.repo.includes('/') ? s.repo.split('/').pop() : s.repo;
+
+    return `<div class="session-card${isActive ? ' active' : ''}" onclick="selectSession('${s.id}')">
+      <div class="session-card-header">
+        <div class="status-dot ${s.status}"></div>
+        <div class="session-repo" title="${escapeHtml(s.repo)}">${escapeHtml(repoShort)}</div>
+      </div>
+      ${s.goal ? `<div class="session-goal">${escapeHtml(s.goal)}</div>` : ''}
+      <div class="session-meta">
+        <span class="status-badge ${s.status}">${STATUS_ICONS[s.status] || ''} ${STATUS_LABELS[s.status] || s.status}</span>
+        <span class="session-time">${timeAgo(s.updatedAt)}</span>
+      </div>
+      ${s.tasksTotal > 0 ? `<div class="session-progress">
+        <div class="progress-bar"><div class="progress-fill" style="width:${pct * 100}%;background:${progressColor(pct)}"></div></div>
+        <div class="progress-label">${s.tasksDone}/${s.tasksTotal} tasks</div>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// ── Render: Session View (Center) ─────────────────────────
+function renderSessionView() {
+  const empty = document.getElementById('empty-state');
+  const view = document.getElementById('session-view');
+
+  if (!state.session) {
+    empty.style.display = 'flex';
+    view.style.display = 'none';
+    return;
+  }
+
+  empty.style.display = 'none';
+  view.style.display = 'flex';
+
+  const s = state.session;
+  const repoShort = s.repo.includes('/') ? s.repo.split('/').pop() : s.repo;
+
+  // Title
+  document.getElementById('sv-title').textContent = s.goal || repoShort;
+
+  // Details
+  const details = document.getElementById('sv-details');
+  let detailsHtml = `
+    <span class="session-detail"><code>${s.id}</code></span>
+    <span class="session-detail">⎇ <code>${s.workingBranch || '—'}</code></span>
+    <span class="status-badge ${s.status}">${STATUS_ICONS[s.status] || ''} ${STATUS_LABELS[s.status] || s.status}</span>
+  `;
+  details.innerHTML = detailsHtml;
+
+  // Actions
+  const actions = document.getElementById('sv-actions');
+  let actionsHtml = '';
+  if (s.prUrl) {
+    actionsHtml += `<a href="${escapeHtml(s.prUrl)}" target="_blank" class="btn btn-primary">View PR #${s.prNumber || ''}</a>`;
+  }
+  if (s.status !== 'stopped') {
+    actionsHtml += `<button class="btn btn-danger" onclick="stopSession('${s.id}')">■ Stop</button>`;
+  }
+  actions.innerHTML = actionsHtml;
+
+  // Tab counts
+  const tabs = document.querySelectorAll('#tab-bar .tab');
+  tabs.forEach(t => {
+    const tab = t.dataset.tab;
+    if (tab === 'conversation') {
+      const count = state.messages.filter(m => m.role !== 'system').length;
+      t.innerHTML = `Conversation${count ? `<span class="tab-count">${count}</span>` : ''}`;
+    } else if (tab === 'tasks') {
+      t.innerHTML = `Tasks${state.tasks.length ? `<span class="tab-count">${state.tasks.length}</span>` : ''}`;
+    }
+  });
+
+  renderTabContent();
+}
+
+function renderTabContent() {
+  const content = document.getElementById('center-content');
+  switch (state.activeTab) {
+    case 'conversation': return renderConversation(content);
+    case 'tasks': return renderTasks(content);
+    case 'plan': return renderPlan(content);
+    case 'diff': return renderDiff(content);
+  }
+}
+
+function renderConversation(el) {
+  if (state.messages.length === 0) {
+    el.innerHTML = `<div class="empty-state" style="height:auto;padding:60px 40px;">
+      <div style="font-size:32px;opacity:0.3;margin-bottom:12px;">💬</div>
+      <div class="empty-text">No messages yet. Start a conversation in the CLI.</div>
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = state.messages.map(m => {
+    const avatarMap = { user: '👤', agent: '🤖', system: '⚙' };
+    return `<div class="message fade-in">
+      <div class="message-avatar ${m.role}">${avatarMap[m.role] || '?'}</div>
+      <div class="message-body">
+        <div class="message-header">
+          <span class="message-role">${m.role}</span>
+          <span class="message-time">${formatTime(m.createdAt)}</span>
+          ${m.metadata?.agent ? `<code style="font-size:10px;background:var(--bg-elevated);padding:1px 6px;border-radius:3px;color:var(--text-muted);">${escapeHtml(m.metadata.agent)}</code>` : ''}
+        </div>
+        <div class="message-content">${formatMessageContent(m.content)}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Auto-scroll to bottom
+  el.scrollTop = el.scrollHeight;
+}
+
+function formatMessageContent(content) {
+  if (!content) return '';
+  let html = escapeHtml(content);
+  // Basic code block detection
+  html = html.replace(/```([\s\S]*?)```/g, '<pre>$1</pre>');
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  return html;
+}
+
+function renderTasks(el) {
+  if (state.tasks.length === 0) {
+    el.innerHTML = `<div class="empty-state" style="height:auto;padding:60px 40px;">
+      <div style="font-size:32px;opacity:0.3;margin-bottom:12px;">📋</div>
+      <div class="empty-text">No tasks yet. Tasks are created when you finalize a plan and build.</div>
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = state.tasks.map(t => {
+    const icon = TASK_ICONS[t.status] || '?';
+    const color = taskColor(t.status);
+
+    let filesHtml = '';
+    if (t.filesLikelyTouched && t.filesLikelyTouched.length > 0) {
+      filesHtml = `<div class="task-files">${t.filesLikelyTouched.map(f =>
+        `<span class="task-file-tag">${escapeHtml(f)}</span>`
+      ).join('')}</div>`;
+    }
+
+    let reviewHtml = '';
+    if (t.reviewVerdict) {
+      const vColor = t.reviewVerdict === 'approve' ? 'var(--task-done)' : 'var(--status-building)';
+      reviewHtml = `<div class="task-review">
+        <span style="color:${vColor}">${t.reviewVerdict === 'approve' ? '✓' : '⟳'}</span>
+        <span style="color:${vColor}">${t.reviewVerdict}</span>
+        ${t.reviewCycles ? `<span style="color:var(--text-muted);">· ${t.reviewCycles} cycle${t.reviewCycles > 1 ? 's' : ''}</span>` : ''}
+      </div>`;
+    }
+
+    return `<div class="task-card">
+      <div class="task-card-header">
+        <span class="task-status-icon" style="color:${color}">${icon}</span>
+        <span class="task-title">${escapeHtml(t.title)}</span>
+        <span class="task-status-label ${t.status}">${t.status}</span>
+      </div>
+      ${t.description ? `<div class="task-description">${escapeHtml(t.description).substring(0, 200)}${t.description.length > 200 ? '...' : ''}</div>` : ''}
+      ${filesHtml}
+      ${reviewHtml}
+    </div>`;
+  }).join('');
+}
+
+function renderPlan(el) {
+  if (!state.session || !state.session.planJson) {
+    el.innerHTML = `<div class="empty-state" style="height:auto;padding:60px 40px;">
+      <div style="font-size:32px;opacity:0.3;margin-bottom:12px;">📐</div>
+      <div class="empty-text">No plan finalized yet. The plan is created during the planning phase.</div>
+    </div>`;
+    return;
+  }
+
+  let planText;
+  try {
+    const plan = JSON.parse(state.session.planJson);
+    planText = JSON.stringify(plan, null, 2);
+  } catch {
+    planText = state.session.planJson;
+  }
+
+  el.innerHTML = `<div class="plan-content"><pre>${escapeHtml(planText)}</pre></div>`;
+}
+
+function renderDiff(el) {
+  const tasksWithDiffs = state.tasks.filter(t => t.diffPatch);
+
+  if (tasksWithDiffs.length === 0) {
+    el.innerHTML = `<div class="empty-state" style="height:auto;padding:60px 40px;">
+      <div style="font-size:32px;opacity:0.3;margin-bottom:12px;">📝</div>
+      <div class="empty-text">No diffs available yet. Diffs appear after tasks complete.</div>
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = tasksWithDiffs.map(t => {
+    const lines = t.diffPatch.split('\n');
+    const linesHtml = lines.map(line => {
+      let cls = 'context';
+      if (line.startsWith('+') && !line.startsWith('+++')) cls = 'add';
+      else if (line.startsWith('-') && !line.startsWith('---')) cls = 'remove';
+      else if (line.startsWith('@@')) cls = 'hunk';
+      return `<div class="diff-line ${cls}">${escapeHtml(line)}</div>`;
+    }).join('');
+
+    return `<div class="diff-block">
+      <div class="diff-header">${escapeHtml(t.title)}</div>
+      <div class="diff-body">${linesHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Render: Right Panel ───────────────────────────────────
+function renderRightPanel() {
+  const el = document.getElementById('right-panel');
+
+  if (!state.session) {
+    el.innerHTML = `<div class="detail-section" style="padding:40px 16px;text-align:center;">
+      <p style="font-size:12px;color:var(--text-muted);">Select a session to view details</p>
+    </div>`;
+    return;
+  }
+
+  const s = state.session;
+  const pct = s.tasksTotal > 0 ? s.tasksDone / s.tasksTotal : 0;
+  const circumference = 2 * Math.PI * 18;
+  const offset = circumference - (pct * circumference);
+
+  let html = '';
+
+  // Progress section
+  if (s.tasksTotal > 0) {
+    html += `<div class="detail-section">
+      <div class="detail-title">Progress</div>
+      <div class="progress-ring-container">
+        <svg class="progress-ring" viewBox="0 0 48 48">
+          <circle class="ring-bg" cx="24" cy="24" r="18"/>
+          <circle class="ring-fill" cx="24" cy="24" r="18"
+            stroke="${progressColor(pct)}"
+            stroke-dasharray="${circumference}"
+            stroke-dashoffset="${offset}"
+            transform="rotate(-90 24 24)"/>
+        </svg>
+        <div class="progress-stats">
+          <span class="progress-pct">${Math.round(pct * 100)}%</span>
+          <span class="progress-detail">${s.tasksDone} of ${s.tasksTotal} tasks complete</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${s.tasksRunning ? `<span class="task-status-label running" style="font-size:10px;">▶ ${s.tasksRunning} running</span>` : ''}
+        ${s.tasksFailed ? `<span class="task-status-label failed" style="font-size:10px;">✗ ${s.tasksFailed} failed</span>` : ''}
+        ${s.tasksBlocked ? `<span class="task-status-label blocked" style="font-size:10px;">⊘ ${s.tasksBlocked} blocked</span>` : ''}
+      </div>
+    </div>`;
+  }
+
+  // Session info section
+  html += `<div class="detail-section">
+    <div class="detail-title">Session Info</div>
+    <div class="detail-row"><span class="detail-label">ID</span><span class="detail-value"><code style="font-size:11px;background:var(--bg-surface);padding:2px 6px;border-radius:3px;">${s.id}</code></span></div>
+    <div class="detail-row"><span class="detail-label">Repository</span><span class="detail-value">${escapeHtml(s.repo)}</span></div>
+    <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value"><span class="status-badge ${s.status}" style="font-size:10px;">${STATUS_ICONS[s.status] || ''} ${STATUS_LABELS[s.status] || s.status}</span></span></div>
+    <div class="detail-row"><span class="detail-label">Created</span><span class="detail-value">${formatTime(s.createdAt)}</span></div>
+    <div class="detail-row"><span class="detail-label">Updated</span><span class="detail-value">${formatTime(s.updatedAt)}</span></div>
+    ${s.stoppedAt ? `<div class="detail-row"><span class="detail-label">Stopped</span><span class="detail-value">${formatTime(s.stoppedAt)}</span></div>` : ''}
+    ${s.workingBranch ? `<div class="detail-row"><span class="detail-label">Branch</span><span class="detail-value" style="font-family:'JetBrains Mono',monospace;font-size:11px;">${escapeHtml(s.workingBranch)}</span></div>` : ''}
+    ${s.prUrl ? `<div class="detail-row"><span class="detail-label">Pull Request</span><span class="detail-value"><a href="${escapeHtml(s.prUrl)}" target="_blank">PR #${s.prNumber || ''} ↗</a></span></div>` : ''}
+    <div class="detail-row"><span class="detail-label">Messages</span><span class="detail-value">${s.messageCount}</span></div>
+  </div>`;
+
+  // Tasks section
+  if (state.tasks.length > 0) {
+    html += `<div class="detail-section">
+      <div class="detail-title">Tasks</div>
+      ${state.tasks.map(t => `<div class="task-mini">
+        <span class="task-mini-icon" style="color:${taskColor(t.status)}">${TASK_ICONS[t.status] || '?'}</span>
+        <span class="task-mini-title" title="${escapeHtml(t.title)}">${escapeHtml(t.title)}</span>
+        <span class="task-mini-status task-status-label ${t.status}" style="font-size:9px;padding:1px 5px;">${t.status}</span>
+      </div>`).join('')}
+    </div>`;
+  }
+
+  // Iterations section
+  if (state.iterations.length > 0) {
+    html += `<div class="detail-section">
+      <div class="detail-title">Iterations</div>
+      ${state.iterations.map(i => `<div class="iteration-card">
+        <div class="iteration-header">Iteration #${i.iterationNumber} · <span class="task-status-label ${i.status}" style="font-size:9px;padding:1px 5px;">${i.status}</span></div>
+        <div class="iteration-feedback">${escapeHtml(i.feedback)}</div>
+      </div>`).join('')}
+    </div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+// ── Tab Handling ──────────────────────────────────────────
+document.getElementById('tab-bar').addEventListener('click', (e) => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  state.activeTab = tab.dataset.tab;
+  document.querySelectorAll('#tab-bar .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === state.activeTab));
+  renderTabContent();
+});
+
+// ── Refresh ───────────────────────────────────────────────
+document.getElementById('refresh-btn').addEventListener('click', () => fetchSessions());
+
+// ── Polling ───────────────────────────────────────────────
+let pollInterval;
+
+async function startPolling() {
+  await fetchSessions();
+  pollInterval = setInterval(async () => {
+    try {
+      await fetchSessions();
+      // Refresh selected session data if it's active
+      if (state.selectedId && state.session && state.session.status !== 'stopped') {
+        const newTasks = await api('sessions/' + state.selectedId + '/tasks');
+        const newMessages = await api('sessions/' + state.selectedId + '/messages');
+        // Only re-render if data changed
+        if (JSON.stringify(newTasks) !== JSON.stringify(state.tasks) ||
+            JSON.stringify(newMessages) !== JSON.stringify(state.messages)) {
+          state.tasks = newTasks;
+          state.messages = newMessages;
+          state.iterations = await api('sessions/' + state.selectedId + '/iterations');
+          renderSessionView();
+          renderRightPanel();
+        }
+      }
+    } catch (e) {
+      console.warn('Poll error:', e);
+    }
+  }, 2500);
+}
+
+// ── Init ──────────────────────────────────────────────────
+startPolling();
+</script>
+</body>
+</html>
