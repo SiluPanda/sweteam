@@ -309,6 +309,44 @@
       .mascot-svg { width: 180px; height: 150px; }
     }
 
+    /* ─── Screenshot Showcase ────────────────────────────── */
+    .screenshot-showcase {
+      display: flex; flex-direction: column; gap: 3rem;
+      margin-top: 2rem;
+    }
+    .screenshot-item {
+      position: relative;
+    }
+    .screenshot-item img {
+      width: 100%; border-radius: 12px;
+      border: 1px solid #1e293b;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(59,130,246,0.1);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .screenshot-item img:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 24px 70px rgba(0,0,0,0.6), 0 0 0 1px rgba(59,130,246,0.2);
+    }
+    .screenshot-label {
+      display: flex; align-items: center; gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .screenshot-label h3 {
+      font-size: 1.1rem; font-weight: 600; color: #f1f5f9; margin: 0;
+    }
+    .screenshot-label p {
+      color: #94a3b8; font-size: 0.9rem; margin: 0 0 0.75rem 0;
+    }
+    .screenshot-tab-bar {
+      display: flex; gap: 0; margin-bottom: -1px; position: relative; z-index: 1;
+    }
+    .screenshot-tab {
+      padding: 0.5rem 1rem; border-radius: 8px 8px 0 0;
+      font-size: 0.8rem; font-weight: 500; color: #64748b;
+      background: #0f172a; border: 1px solid #1e293b; border-bottom: none;
+    }
+    .screenshot-tab.active { color: #f1f5f9; background: #1e293b; }
+
     /* ─── Scroll fade-in ───────────────────────────────── */
     .fade-in {
       opacity: 0; transform: translateY(20px);
@@ -332,6 +370,7 @@
   <div class="container">
     <div class="logo"><span class="dot">&#9679;</span> sweteam</div>
     <div class="nav-links">
+      <a href="#dashboard">Dashboard</a>
       <a href="#features">Features</a>
       <a href="#how-it-works">How It Works</a>
       <a href="#quickstart">Quick Start</a>
@@ -483,6 +522,30 @@
     <div class="install-box">
       <span class="prompt">$</span>
       <span class="cmd">npm install -g sweteam</span>
+    </div>
+  </div>
+</section>
+
+<!-- ─── Web Dashboard ──────────────────────────────────── -->
+<section id="dashboard" class="fade-in">
+  <div class="container">
+    <h2 class="section-title">Web Dashboard</h2>
+    <p class="section-subtitle">Monitor all your sessions, tasks, and agent output from a browser-based dashboard.</p>
+    <div class="install-box" style="margin-bottom: 2rem;">
+      <span class="prompt">$</span>
+      <span class="cmd">npm run web</span>
+    </div>
+    <div class="screenshot-showcase">
+      <div class="screenshot-item">
+        <div class="screenshot-label"><h3>Session list</h3></div>
+        <p class="screenshot-label" style="margin-bottom: 0.75rem;"><span style="color:#94a3b8; font-size:0.9rem;">Browse all sessions at a glance &mdash; status badges, task progress bars, and timestamps.</span></p>
+        <img src="screenshots/dashboard.png" alt="sweteam web dashboard showing session list" loading="lazy" />
+      </div>
+      <div class="screenshot-item">
+        <div class="screenshot-label"><h3>Session detail</h3></div>
+        <p class="screenshot-label" style="margin-bottom: 0.75rem;"><span style="color:#94a3b8; font-size:0.9rem;">Click into any session to see the full conversation timeline, task breakdown, progress ring, and PR link.</span></p>
+        <img src="screenshots/session-detail.png" alt="sweteam session detail view with tasks and progress" loading="lazy" />
+      </div>
     </div>
   </div>
 </section>
