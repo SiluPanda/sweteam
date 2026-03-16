@@ -2,6 +2,19 @@ import { spawn, execFileSync } from 'child_process';
 import type { AgentAdapter, AgentResult } from './adapter.js';
 import { trackProcess } from '../lifecycle.js';
 
+/** Return a minimal environment for child processes to avoid leaking secrets. */
+function safeEnv(): Record<string, string | undefined> {
+  return {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    SHELL: process.env.SHELL,
+    TERM: process.env.TERM,
+    LANG: process.env.LANG,
+    // Claude Code may need ANTHROPIC_API_KEY
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  };
+}
+
 /**
  * Format a tool_use block into a short progress line for the AgentPanel.
  */
@@ -31,7 +44,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
 
   async isAvailable(): Promise<boolean> {
     try {
-      execFileSync('which', ['claude'], { encoding: 'utf-8', stdio: 'pipe' });
+      execFileSync('which', ['claude'], { encoding: 'utf-8', stdio: 'pipe', timeout: 5000 });
       return true;
     } catch {
       return false;
@@ -67,6 +80,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       const proc = spawn('claude', args, {
         cwd: opts.cwd,
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: safeEnv(),
       });
       trackProcess(proc, opts.sessionId);
 
@@ -94,18 +108,21 @@ export class ClaudeCodeAdapter implements AgentAdapter {
         } catch {
           // Non-JSON line — treat as raw text (backward compat)
           const rawLine = line + '\n';
-          if (accumulatedText.length + rawLine.length > MAX_OUTPUT_SIZE) {
-            accumulatedText =
-              accumulatedText.slice(accumulatedText.length + rawLine.length - MAX_OUTPUT_SIZE) +
-              rawLine;
-          } else {
-            accumulatedText += rawLine;
-          }
+          const combinedRaw = accumulatedText + rawLine;
+          accumulatedText = combinedRaw.length > MAX_OUTPUT_SIZE
+            ? combinedRaw.slice(combinedRaw.length - MAX_OUTPUT_SIZE)
+            : combinedRaw;
           // Log if it looks like an error message
           if (/^(error:|Error:|fatal:|Authentication|not found)/i.test(trimmed)) {
             console.error(`claude-code non-JSON error output: ${trimmed}`);
           }
-          if (opts.onOutput) opts.onOutput(line + '\n');
+          if (opts.onOutput) {
+            try {
+              opts.onOutput(line + '\n');
+            } catch (err) {
+              console.warn(`onOutput callback error: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
           return;
         }
 
@@ -119,26 +136,30 @@ export class ClaudeCodeAdapter implements AgentAdapter {
 
           for (const block of content) {
             if (block.type === 'tool_use') {
-              const toolName = block.name as string;
+              const toolName = (block.name as string) ?? 'unknown';
               const input = (block.input ?? {}) as Record<string, unknown>;
               const progressLine = formatToolProgress(toolName, input);
-              if (opts.onOutput) opts.onOutput(progressLine + '\n');
+              if (opts.onOutput) {
+                try {
+                  opts.onOutput(progressLine + '\n');
+                } catch (err) {
+                  console.warn(`onOutput callback error: ${err instanceof Error ? err.message : String(err)}`);
+                }
+              }
             } else if (block.type === 'text') {
               // Accumulate text silently — don't send to panel
               const blockText = (block.text as string) ?? '';
-              if (accumulatedText.length + blockText.length > MAX_OUTPUT_SIZE) {
-                accumulatedText =
-                  accumulatedText.slice(
-                    accumulatedText.length + blockText.length - MAX_OUTPUT_SIZE,
-                  ) + blockText;
-              } else {
-                accumulatedText += blockText;
-              }
+              const combinedBlock = accumulatedText + blockText;
+              accumulatedText = combinedBlock.length > MAX_OUTPUT_SIZE
+                ? combinedBlock.slice(combinedBlock.length - MAX_OUTPUT_SIZE)
+                : combinedBlock;
             }
           }
         } else if (type === 'result') {
-          // Final result — use parsed.result as the response text
-          resultText = (parsed.result as string) ?? '';
+          // Final result — only set if not already captured (preserves first result)
+          if (!resultText) {
+            resultText = (parsed.result as string) ?? '';
+          }
         }
         // Ignore system, user, and other event types
       }
@@ -159,11 +180,11 @@ export class ClaudeCodeAdapter implements AgentAdapter {
 
       proc.stderr.on('data', (chunk: Buffer) => {
         const text = chunk.toString();
-        if (stderr.length + text.length > MAX_OUTPUT_SIZE) {
-          stderr = stderr.slice(stderr.length + text.length - MAX_OUTPUT_SIZE) + text;
-        } else {
-          stderr += text;
-        }
+        const combinedStderr = stderr + text;
+        stderr =
+          combinedStderr.length > MAX_OUTPUT_SIZE
+            ? combinedStderr.slice(combinedStderr.length - MAX_OUTPUT_SIZE)
+            : combinedStderr;
       });
 
       const timer =
@@ -175,14 +196,27 @@ export class ClaudeCodeAdapter implements AgentAdapter {
             }, timeout)
           : null;
 
-      proc.on('close', (code) => {
+      proc.on('close', (code, signal) => {
         if (timer) clearTimeout(timer);
         if (settled) return;
         settled = true;
 
-        // Flush remaining line buffer
+        // Flush remaining line buffer — try parsing as JSON first,
+        // fall back to including as raw text rather than silently dropping
         if (lineBuffer.trim()) {
-          processLine(lineBuffer);
+          try {
+            JSON.parse(lineBuffer.trim());
+            // Valid JSON — process normally
+            processLine(lineBuffer);
+          } catch {
+            // Partial/invalid JSON — include as raw text in output
+            const rawContent = lineBuffer + '\n';
+            const combinedFinal = accumulatedText + rawContent;
+            accumulatedText =
+              combinedFinal.length > MAX_OUTPUT_SIZE
+                ? combinedFinal.slice(combinedFinal.length - MAX_OUTPUT_SIZE)
+                : combinedFinal;
+          }
           lineBuffer = '';
         }
 
@@ -190,7 +224,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
 
         resolve({
           output: finalOutput,
-          exitCode: code ?? 1,
+          exitCode: code ?? (signal ? 128 : 1),
           durationMs: Date.now() - startTime,
         });
       });

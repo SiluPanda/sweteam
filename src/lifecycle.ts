@@ -103,7 +103,11 @@ function handleShutdown(signal: string): void {
   exitTimer.unref(); // Don't keep event loop alive for this
 }
 
+let handlersInstalled = false;
+
 export function installShutdownHandlers(): void {
+  if (handlersInstalled) return;
+  handlersInstalled = true;
   process.on('SIGINT', () => handleShutdown('SIGINT'));
   process.on('SIGTERM', () => handleShutdown('SIGTERM'));
   process.on('SIGHUP', () => handleShutdown('SIGHUP'));
@@ -115,7 +119,11 @@ export function installShutdownHandlers(): void {
   process.on('uncaughtException', (err) => {
     console.error('Uncaught exception:', err.message);
     killAllProcesses();
-    closeDb();
+    try {
+      closeDb();
+    } catch (closeErr) {
+      console.error('Failed to close database during crash handler:', closeErr);
+    }
     process.exit(1);
   });
 }

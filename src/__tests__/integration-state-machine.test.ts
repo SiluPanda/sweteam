@@ -90,9 +90,9 @@ describe('integration — state machine transitions', () => {
     expect(() => transition('nonexistent', 'building')).toThrow();
   });
 
-  it('should reject building → building self-transition', () => {
+  it('should allow building → building self-transition (idempotent no-op)', () => {
     const id = createTestSession('building');
-    expect(() => transition(id, 'building')).toThrow('Invalid transition');
+    expect(() => transition(id, 'building')).not.toThrow();
   });
 
   it('should allow iterating → planning transition', () => {

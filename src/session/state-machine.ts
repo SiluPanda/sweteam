@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
 import { sessions } from '../db/schema.js';
 
@@ -9,7 +9,7 @@ const VALID_TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
   building: ['awaiting_feedback', 'planning', 'stopped'],
   awaiting_feedback: ['building', 'iterating', 'stopped'],
   iterating: ['awaiting_feedback', 'planning', 'stopped'],
-  stopped: ['planning', 'building', 'iterating'],
+  stopped: ['planning', 'building', 'iterating', 'awaiting_feedback'],
 };
 
 export function validateTransition(from: SessionStatus, to: SessionStatus): boolean {
@@ -32,6 +32,11 @@ export function transition(sessionId: string, newStatus: SessionStatus): void {
 
   const currentStatus = rows[0].status as SessionStatus;
 
+  if (currentStatus === newStatus) {
+    // Self-transition is a no-op
+    return;
+  }
+
   if (!validateTransition(currentStatus, newStatus)) {
     throw new Error(`Invalid transition: ${currentStatus} → ${newStatus}`);
   }
@@ -48,7 +53,17 @@ export function transition(sessionId: string, newStatus: SessionStatus): void {
     updates.stoppedAt = null;
   }
 
-  db.update(sessions).set(updates).where(eq(sessions.id, sessionId)).run();
+  const result = db
+    .update(sessions)
+    .set(updates)
+    .where(and(eq(sessions.id, sessionId), eq(sessions.status, currentStatus)))
+    .run();
+
+  if (result.changes === 0) {
+    throw new Error(
+      `State transition conflict: session ${sessionId} status changed concurrently (expected ${currentStatus})`,
+    );
+  }
 
   const stateLabels: Record<string, string> = {
     planning: 'Planning',

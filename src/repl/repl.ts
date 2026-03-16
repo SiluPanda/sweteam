@@ -372,8 +372,15 @@ async function dispatch(command: string, args: string[]): Promise<void> {
         const sessionTasks = getTasks(session.id);
         const allQueued =
           sessionTasks.length > 0 && sessionTasks.every((t) => t.status === 'queued');
+        const intermediateCount = sessionTasks.filter(
+          (t) => t.status === 'running' || t.status === 'reviewing' || t.status === 'fixing',
+        ).length;
         if (allQueued) {
           console.log('Build was interrupted before any tasks ran. Type @build to retry.\n');
+        } else if (intermediateCount > 0) {
+          console.log(
+            `Warning: ${intermediateCount} task(s) in intermediate state. Type @build to restart.\n`,
+          );
         } else {
           console.log('Send feedback or @feedback <text>.\n');
         }

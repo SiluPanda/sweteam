@@ -86,7 +86,31 @@ export async function runParallelOrchestrator(
   const dag = buildDag(allTasks);
 
   // Validate no circular dependencies before starting
-  topologicalSort(dag);
+  try {
+    topologicalSort(dag);
+  } catch (err) {
+    const resolvedIds = new Set<string>();
+    const visit = (id: string, visited: Set<string>) => {
+      if (visited.has(id)) return;
+      visited.add(id);
+      resolvedIds.add(id);
+      const node = dag.get(id);
+      if (node) {
+        for (const dep of node.dependsOn) visit(dep, visited);
+      }
+    };
+    for (const id of dag.keys()) visit(id, new Set());
+    const unresolvedIds = [...dag.keys()].filter((id) => !resolvedIds.has(id));
+    const allIds = [...dag.keys()];
+    const hint =
+      unresolvedIds.length > 0
+        ? `Unresolvable task IDs: ${unresolvedIds.join(', ')}`
+        : `All task IDs involved: ${allIds.join(', ')}`;
+    throw new Error(
+      `Circular dependency detected in task DAG. ${hint}. Original error: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
+    );
+  }
 
   const completed = new Set<string>();
   const failed = new Set<string>();
@@ -131,11 +155,15 @@ export async function runParallelOrchestrator(
       if (ready.length === 0 && running.size === 0) break;
 
       // Launch tasks up to max_parallel
-      const slotsAvailable = maxParallel - running.size;
+      const slotsAvailable = Math.max(0, maxParallel - running.size);
       const toLaunch = ready.slice(0, slotsAvailable);
 
       for (const taskId of toLaunch) {
-        const task = taskMap.get(taskId)!;
+        const task = taskMap.get(taskId);
+        if (!task) {
+          console.warn(`[parallel-runner] taskMap desync: taskId "${taskId}" not found in taskMap, skipping`);
+          continue;
+        }
 
         const taskPromise = (async () => {
           const safeBranchId = task.id.replace(/:/g, '-').replace(/[^a-zA-Z0-9/_-]/g, '');
@@ -225,15 +253,19 @@ export async function runParallelOrchestrator(
             // Always clean up worktree
             try {
               removeWorktree(worktreePath, repoPath);
-            } catch {
-              /* best effort */
+            } catch (cleanupErr) {
+              console.warn(
+                `[parallel-runner] Failed to remove worktree at ${worktreePath}: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`,
+              );
             }
             // Delete the task branch if it wasn't merged
             if (!completed.has(taskId)) {
               try {
                 git(['branch', '-D', branchName], repoPath);
-              } catch {
-                /* ignore */
+              } catch (branchErr) {
+                console.warn(
+                  `[parallel-runner] Failed to delete branch ${branchName}: ${branchErr instanceof Error ? branchErr.message : String(branchErr)}`,
+                );
               }
             }
             running.delete(taskId);
@@ -244,8 +276,12 @@ export async function runParallelOrchestrator(
       }
 
       if (running.size > 0) {
-        // Wait for at least one task to complete before checking for new ready tasks
-        await Promise.race(running.values());
+        // Wait for at least one task to complete before checking for new ready tasks.
+        // Wrap each promise so a rejection doesn't throw out of Promise.race
+        // and orphan the remaining running tasks.
+        await Promise.race(
+          [...running.values()].map((p) => p.catch(() => {})),
+        );
       }
     }
 

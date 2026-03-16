@@ -106,6 +106,24 @@ export function loadConfig(configPath?: string): SweteamConfig {
       git: { ...DEFAULT_CONFIG.git, ...parsed.git },
       agents: { ...DEFAULT_CONFIG.agents, ...parsed.agents },
     };
+
+    // Validate and clamp numeric fields
+    if (typeof config.execution.max_parallel !== 'number' || !isFinite(config.execution.max_parallel)) {
+      config.execution.max_parallel = DEFAULT_CONFIG.execution.max_parallel;
+    } else {
+      config.execution.max_parallel = Math.max(1, Math.floor(config.execution.max_parallel));
+    }
+
+    if (typeof config.execution.max_review_cycles !== 'number' || !isFinite(config.execution.max_review_cycles)) {
+      config.execution.max_review_cycles = DEFAULT_CONFIG.execution.max_review_cycles;
+    } else {
+      config.execution.max_review_cycles = Math.max(1, Math.floor(config.execution.max_review_cycles));
+    }
+
+    // Validate boolean fields
+    if (typeof config.git.squash_on_merge !== 'boolean') {
+      config.git.squash_on_merge = DEFAULT_CONFIG.git.squash_on_merge;
+    }
   }
 
   // Apply CLI overrides

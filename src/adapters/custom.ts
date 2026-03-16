@@ -1,12 +1,24 @@
 import { spawn, execFileSync } from 'child_process';
 import { randomUUID } from 'crypto';
-import { writeFileSync, readFileSync, unlinkSync } from 'fs';
+import { writeFileSync, readFileSync, unlinkSync, lstatSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import type { AgentAdapter, AgentResult } from './adapter.js';
 import type { AgentConfig } from '../config/loader.js';
 import { trackProcess } from '../lifecycle.js';
 import { detectInputPrompt, extractPromptText } from './prompt-detection.js';
+
+/** Return a minimal environment for child processes to avoid leaking secrets. */
+function safeEnv(extraEnv?: Record<string, string>): Record<string, string | undefined> {
+  return {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    SHELL: process.env.SHELL,
+    TERM: process.env.TERM,
+    LANG: process.env.LANG,
+    ...extraEnv,
+  };
+}
 
 export class CustomAdapter implements AgentAdapter {
   name: string;
@@ -22,6 +34,7 @@ export class CustomAdapter implements AgentAdapter {
       execFileSync('which', [this.config.command], {
         encoding: 'utf-8',
         stdio: 'pipe',
+        timeout: 5000,
       });
       return true;
     } catch {
@@ -63,6 +76,7 @@ export class CustomAdapter implements AgentAdapter {
       const proc = spawn(this.config.command, args, {
         cwd: opts.cwd,
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: safeEnv(),
       });
       trackProcess(proc, opts.sessionId);
 
@@ -73,6 +87,7 @@ export class CustomAdapter implements AgentAdapter {
       let debounceTimer: ReturnType<typeof setTimeout> | null = null;
       let waitingForInput = false;
       let settled = false;
+      let stdinEnded = false;
 
       // Silence EPIPE but log other stdin errors
       proc.stdin.on('error', (err: NodeJS.ErrnoException) => {
@@ -83,11 +98,11 @@ export class CustomAdapter implements AgentAdapter {
 
       proc.stdout.on('data', (chunk: Buffer) => {
         const text = chunk.toString();
-        if (stdout.length + text.length > MAX_OUTPUT_SIZE) {
-          stdout = stdout.slice(stdout.length + text.length - MAX_OUTPUT_SIZE) + text;
-        } else {
-          stdout += text;
-        }
+        const combinedStdout = stdout + text;
+        stdout =
+          combinedStdout.length > MAX_OUTPUT_SIZE
+            ? combinedStdout.slice(combinedStdout.length - MAX_OUTPUT_SIZE)
+            : combinedStdout;
         if (opts.onOutput) {
           opts.onOutput(text);
         }
@@ -123,22 +138,12 @@ export class CustomAdapter implements AgentAdapter {
 
       proc.stderr.on('data', (chunk: Buffer) => {
         const errText = chunk.toString();
-        if (stderr.length + errText.length > MAX_OUTPUT_SIZE) {
-          stderr = stderr.slice(stderr.length + errText.length - MAX_OUTPUT_SIZE) + errText;
-        } else {
-          stderr += errText;
-        }
+        const combinedStderr = stderr + errText;
+        stderr =
+          combinedStderr.length > MAX_OUTPUT_SIZE
+            ? combinedStderr.slice(combinedStderr.length - MAX_OUTPUT_SIZE)
+            : combinedStderr;
       });
-
-      const timer =
-        timeout > 0
-          ? setTimeout(() => {
-              settled = true;
-              proc.kill('SIGTERM');
-              cleanup();
-              reject(new Error(`${this.name} timed out after ${timeout}ms`));
-            }, timeout)
-          : null;
 
       const cleanup = () => {
         if (promptFile) {
@@ -150,31 +155,55 @@ export class CustomAdapter implements AgentAdapter {
         }
       };
 
-      proc.on('close', (code) => {
+      const timer =
+        timeout > 0
+          ? setTimeout(() => {
+              settled = true;
+              proc.stdout.removeAllListeners('data');
+              proc.stderr.removeAllListeners('data');
+              proc.kill('SIGTERM');
+              cleanup();
+              reject(new Error(`${this.name} timed out after ${timeout}ms`));
+            }, timeout)
+          : null;
+
+      // Ensure stdin is closed when the process exits, preventing fd leak
+      // when promptVia='file' and onInputNeeded keeps stdin open
+      proc.on('close', (code, signal) => {
         if (timer) clearTimeout(timer);
         if (debounceTimer) clearTimeout(debounceTimer);
+
+        // Always close stdin if it hasn't been ended yet
+        if (!stdinEnded && !proc.stdin.destroyed) {
+          try {
+            proc.stdin.end();
+          } catch {
+            /* already closed */
+          }
+          stdinEnded = true;
+        }
+
         if (settled) {
           cleanup();
           return;
         }
         settled = true;
 
-        // Close stdin if it was kept open for interactive input
-        if (opts.onInputNeeded) {
-          try {
-            if (!proc.stdin.destroyed) proc.stdin.end();
-          } catch {
-            /* already closed */
-          }
-        }
-
         let output = stdout || stderr;
 
         if (outputFrom === 'file') {
           const outputFile = join(opts.cwd, '.sweteam-output.txt');
           try {
-            output = readFileSync(outputFile, 'utf-8');
-            unlinkSync(outputFile);
+            // Check for symlink attack before reading
+            const stat = lstatSync(outputFile);
+            if (stat.isSymbolicLink()) {
+              console.warn(
+                `Skipping output file ${outputFile}: is a symlink (possible symlink attack)`,
+              );
+            } else {
+              output = readFileSync(outputFile, 'utf-8');
+              unlinkSync(outputFile);
+            }
           } catch {
             /* file may not exist */
           }
@@ -183,7 +212,7 @@ export class CustomAdapter implements AgentAdapter {
         cleanup();
         resolve({
           output,
-          exitCode: code ?? 1,
+          exitCode: code ?? (signal ? 128 : 1),
           durationMs: Date.now() - startTime,
         });
       });
@@ -202,11 +231,13 @@ export class CustomAdapter implements AgentAdapter {
         // If onInputNeeded is provided, keep stdin open for interactive responses
         if (!opts.onInputNeeded) {
           proc.stdin.end();
+          stdinEnded = true;
         }
       } else {
         // For arg/file prompt modes, close stdin unless interactive input is expected
         if (!opts.onInputNeeded) {
           proc.stdin.end();
+          stdinEnded = true;
         }
       }
     });

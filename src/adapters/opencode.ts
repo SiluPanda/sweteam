@@ -3,12 +3,24 @@ import type { AgentAdapter, AgentResult } from './adapter.js';
 import { trackProcess } from '../lifecycle.js';
 import { detectInputPrompt, extractPromptText } from './prompt-detection.js';
 
+/** Return a minimal environment for child processes to avoid leaking secrets. */
+function safeEnv(): Record<string, string | undefined> {
+  return {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    SHELL: process.env.SHELL,
+    TERM: process.env.TERM,
+    LANG: process.env.LANG,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  };
+}
+
 export class OpenCodeAdapter implements AgentAdapter {
   name = 'opencode';
 
   async isAvailable(): Promise<boolean> {
     try {
-      execFileSync('which', ['opencode'], { encoding: 'utf-8', stdio: 'pipe' });
+      execFileSync('which', ['opencode'], { encoding: 'utf-8', stdio: 'pipe', timeout: 5000 });
       return true;
     } catch {
       return false;
@@ -28,7 +40,7 @@ export class OpenCodeAdapter implements AgentAdapter {
     const startTime = Date.now();
 
     return new Promise((resolve, reject) => {
-      const args = ['--non-interactive', opts.prompt];
+      const args = ['--non-interactive'];
       if (opts.images) {
         for (const img of opts.images) {
           args.push('--image', img);
@@ -38,6 +50,7 @@ export class OpenCodeAdapter implements AgentAdapter {
       const proc = spawn('opencode', args, {
         cwd: opts.cwd,
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: safeEnv(),
       });
       trackProcess(proc, opts.sessionId);
 
@@ -58,11 +71,11 @@ export class OpenCodeAdapter implements AgentAdapter {
 
       proc.stdout.on('data', (chunk: Buffer) => {
         const text = chunk.toString();
-        if (stdout.length + text.length > MAX_OUTPUT_SIZE) {
-          stdout = stdout.slice(stdout.length + text.length - MAX_OUTPUT_SIZE) + text;
-        } else {
-          stdout += text;
-        }
+        const combinedStdout = stdout + text;
+        stdout =
+          combinedStdout.length > MAX_OUTPUT_SIZE
+            ? combinedStdout.slice(combinedStdout.length - MAX_OUTPUT_SIZE)
+            : combinedStdout;
         if (opts.onOutput) {
           opts.onOutput(text);
         }
@@ -98,30 +111,32 @@ export class OpenCodeAdapter implements AgentAdapter {
 
       proc.stderr.on('data', (chunk: Buffer) => {
         const errText = chunk.toString();
-        if (stderr.length + errText.length > MAX_OUTPUT_SIZE) {
-          stderr = stderr.slice(stderr.length + errText.length - MAX_OUTPUT_SIZE) + errText;
-        } else {
-          stderr += errText;
-        }
+        const combinedStderr = stderr + errText;
+        stderr =
+          combinedStderr.length > MAX_OUTPUT_SIZE
+            ? combinedStderr.slice(combinedStderr.length - MAX_OUTPUT_SIZE)
+            : combinedStderr;
       });
 
       const timer =
         timeout > 0
           ? setTimeout(() => {
               settled = true;
+              proc.stdout.removeAllListeners('data');
+              proc.stderr.removeAllListeners('data');
               proc.kill('SIGTERM');
               reject(new Error(`OpenCode timed out after ${timeout}ms`));
             }, timeout)
           : null;
 
-      proc.on('close', (code) => {
+      proc.on('close', (code, signal) => {
         if (timer) clearTimeout(timer);
         if (debounceTimer) clearTimeout(debounceTimer);
         if (settled) return;
         settled = true;
         resolve({
           output: stdout || stderr,
-          exitCode: code ?? 1,
+          exitCode: code ?? (signal ? 128 : 1),
           durationMs: Date.now() - startTime,
         });
       });
@@ -133,6 +148,10 @@ export class OpenCodeAdapter implements AgentAdapter {
         settled = true;
         reject(err);
       });
+
+      // Pass prompt via stdin instead of CLI arg to avoid ARG_MAX overflow
+      proc.stdin.write(opts.prompt);
+      proc.stdin.end();
     });
   }
 }

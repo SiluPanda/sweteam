@@ -127,7 +127,15 @@ function parseMarkdown(text: string): ParsedTask[] {
     const description =
       extractSection(content, 'description') || content.trim().split('\n')[0] || '';
     const files = extractListItems(content, 'files');
-    const deps = extractListItems(content, 'depends_on|depends|dependencies|deps');
+    const rawDeps = extractListItems(content, 'depends_on|depends|dependencies|deps');
+    const deps = rawDeps.map((dep) => {
+      const trimmed = dep.trim();
+      // Normalize raw numeric dependency IDs to task-NNN format
+      if (/^\d+$/.test(trimmed)) {
+        return `task-${trimmed.padStart(3, '0')}`;
+      }
+      return trimmed;
+    });
     const criteria = extractListItems(content, 'acceptance|criteria');
 
     tasks.push({

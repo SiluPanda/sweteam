@@ -54,23 +54,32 @@ export function insertTasksFromPlan(
     const dbId = idMap.get(t.id)!;
     const scopedDeps = t.dependsOn.map((dep) => idMap.get(dep) ?? scopeTaskId(sessionId, dep));
 
-    db.insert(tasksTable)
-      .values({
-        id: dbId,
-        sessionId,
-        title: t.title,
-        description: t.description,
-        status: 'queued',
-        dependsOn: scopedDeps.length > 0 ? JSON.stringify(scopedDeps) : null,
-        filesLikelyTouched:
-          t.filesLikelyTouched.length > 0 ? JSON.stringify(t.filesLikelyTouched) : null,
-        acceptanceCriteria:
-          t.acceptanceCriteria.length > 0 ? JSON.stringify(t.acceptanceCriteria) : null,
-        order: orderOffset + i + 1,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
+    try {
+      db.insert(tasksTable)
+        .values({
+          id: dbId,
+          sessionId,
+          title: t.title,
+          description: t.description,
+          status: 'queued',
+          dependsOn: scopedDeps.length > 0 ? JSON.stringify(scopedDeps) : null,
+          filesLikelyTouched:
+            t.filesLikelyTouched.length > 0 ? JSON.stringify(t.filesLikelyTouched) : null,
+          acceptanceCriteria:
+            t.acceptanceCriteria.length > 0 ? JSON.stringify(t.acceptanceCriteria) : null,
+          order: orderOffset + i + 1,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`Failed to insert task ${displayTaskId(dbId)} (${t.title}): ${msg}`);
+      throw new Error(
+        `Failed to insert task ${displayTaskId(dbId)} ("${t.title}") into session ${sessionId}: ${msg}`,
+        { cause: err },
+      );
+    }
   }
 }
 
@@ -115,6 +124,8 @@ function markBlockedTasks(failedId: string, allTasks: TaskRecord[]): string[] {
         .set({ status: 'blocked', updatedAt: new Date() })
         .where(eq(tasksTable.id, task.id))
         .run();
+      // Update in-memory state so recursive calls see the blocked status (Bug #4)
+      task.status = 'blocked';
       blocked.push(task.id);
 
       // Recursively block downstream
@@ -238,7 +249,21 @@ export async function runOrchestrator(
       // Review and merge — Reviewer phase
       // Reload task from DB (it was updated by runTask)
       const updatedTasks = getTasksForSession(sessionId);
-      const updatedTask = updatedTasks.find((t) => t.id === task.id)!;
+      const updatedTask = updatedTasks.find((t) => t.id === task.id);
+
+      if (!updatedTask) {
+        // Task was deleted mid-run (e.g. concurrent rebuild). Skip it.
+        console.warn(`Task ${displayTaskId(task.id)} not found in DB after coder phase — skipping review`);
+        failedIds.add(task.id);
+        failed.push(task.id);
+        task.status = 'failed';
+        addMessage(
+          sessionId,
+          'system',
+          `Task ${displayTaskId(task.id)} disappeared from DB during build — marked as failed`,
+        );
+        continue;
+      }
 
       cb.onAgentStart?.(task.id, task.title, 'Reviewer');
       const reviewerOutput = cb.onAgentOutput
@@ -291,9 +316,10 @@ export async function runOrchestrator(
     );
     for (const t of stuckTasks) {
       db.update(tasksTable)
-        .set({ status: 'cancelled', updatedAt: new Date() })
+        .set({ status: 'failed', updatedAt: new Date() })
         .where(eq(tasksTable.id, t.id))
         .run();
+      console.warn(`Task ${displayTaskId(t.id)} was ${t.status} when session stopped — marked as failed`);
     }
   }
 

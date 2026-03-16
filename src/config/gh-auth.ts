@@ -9,7 +9,11 @@ export function validateGhAuth(): { authenticated: boolean; message: string } {
       timeout: 10000,
     });
     return { authenticated: true, message: 'GitHub CLI is authenticated.' };
-  } catch {
+  } catch (err) {
+    const stderr = (err as { stderr?: Buffer | string })?.stderr?.toString() ?? '';
+    if (stderr) {
+      console.warn(`[warn] gh auth status failed: ${stderr.trim()}`);
+    }
     return {
       authenticated: false,
       message: 'GitHub CLI is not authenticated. Run `gh auth login` first.',

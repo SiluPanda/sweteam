@@ -38,7 +38,9 @@ ${task.title}: ${task.description}
 ${criteria}
 
 ## Diff
+<diff>
 ${diff}
+</diff>
 
 Respond with ONLY valid JSON:
 {
@@ -51,8 +53,11 @@ Respond with ONLY valid JSON:
 }
 
 export function parseReviewResponse(output: string): ReviewResult {
-  // Try to extract JSON from response
-  const jsonMatch = output.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  // Try to extract JSON from the LAST code fence in the response.
+  // We search from the end to avoid matching backtick fences that may
+  // appear inside an embedded diff earlier in the prompt/response.
+  const allMatches = [...output.matchAll(/```(?:json)?\s*\n?([\s\S]*?)\n?```/g)];
+  const jsonMatch = allMatches.length > 0 ? allMatches[allMatches.length - 1] : null;
   const jsonStr = jsonMatch ? jsonMatch[1] : output;
 
   try {
@@ -152,7 +157,7 @@ export async function reviewAndMerge(
 
   for (let cycle = 0; cycle < effectiveMaxCycles; cycle++) {
     // Always get a fresh diff for this review cycle
-    const diff = git(['diff', `${sessionBranch}...${task.branchName}`], repoPath);
+    const diff = git(['diff', `${sessionBranch}...${task.branchName}`], taskCwd);
 
     const reviewResult = await reviewTask(task, diff, repoPath, onOutput, onInputNeeded, {
       images: options?.images,
@@ -200,8 +205,9 @@ export async function reviewAndMerge(
       return { merged: true, reviewResult };
     }
 
-    // Request changes — feed issues back to coder
-    if (cycle < effectiveMaxCycles - 1) {
+    // Request changes — feed issues back to coder (including on the last cycle,
+    // so the final review's issues are not silently ignored)
+    if (cycle < effectiveMaxCycles) {
       db.update(tasks)
         .set({ status: 'fixing', updatedAt: new Date() })
         .where(eq(tasks.id, task.id))
@@ -235,6 +241,22 @@ Summary: ${reviewResult.summary}`;
       // Re-commit fixes
       try {
         git(['add', '-A'], taskCwd);
+
+        // Check if there are actually staged changes before committing.
+        // If the coder produced no changes, break out rather than looping
+        // endlessly with the same review issues.
+        try {
+          git(['diff', '--cached', '--quiet'], taskCwd);
+          // Exit code 0 means no staged changes — coder couldn't fix the issues
+          console.log(
+            `[reviewer] Coder produced no changes on cycle ${cycle + 1} — ` +
+              `cannot fix remaining issues, ending review loop`,
+          );
+          break;
+        } catch {
+          // Exit code 1 means there ARE staged changes — proceed with commit
+        }
+
         git(
           [
             'commit',
@@ -244,13 +266,27 @@ Summary: ${reviewResult.summary}`;
           taskCwd,
         );
       } catch {
-        // No changes to commit
+        // Commit failed for other reasons — break to avoid infinite loop
+        console.log(
+          `[reviewer] git commit failed on cycle ${cycle + 1}, ending review loop`,
+        );
+        break;
       }
 
-      db.update(tasks)
-        .set({ status: 'reviewing', updatedAt: new Date() })
-        .where(eq(tasks.id, task.id))
-        .run();
+      // Update status back to reviewing. Wrapped in try/catch so a DB failure
+      // after a successful git commit doesn't crash the orchestrator — the task
+      // will be in an inconsistent state but the process survives.
+      try {
+        db.update(tasks)
+          .set({ status: 'reviewing', updatedAt: new Date() })
+          .where(eq(tasks.id, task.id))
+          .run();
+      } catch (dbErr) {
+        console.error(
+          `[reviewer] DB update failed after git commit on cycle ${cycle + 1}:`,
+          dbErr instanceof Error ? dbErr.message : String(dbErr),
+        );
+      }
     }
   }
 

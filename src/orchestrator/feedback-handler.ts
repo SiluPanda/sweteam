@@ -1,5 +1,6 @@
 import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { readFileSync, writeFileSync } from 'fs';
 import { getDb } from '../db/client.js';
 import { iterations, sessions, tasks as tasksTable } from '../db/schema.js';
 import { transition } from '../session/state-machine.js';
@@ -22,7 +23,8 @@ import {
   cleanupWorktrees,
 } from '../git/git.js';
 import { runParallelOrchestrator } from './parallel-runner.js';
-import { clearLog, writeEvent } from '../session/agent-log.js';
+import { clearLog, getLogPath, writeEvent } from '../session/agent-log.js';
+import { safeJsonParse } from './dag.js';
 
 export interface PlanDelta {
   modifiedTasks: Array<{ id: string; changes: string }>;
@@ -131,20 +133,29 @@ export function parsePlanDelta(output: string): PlanDelta {
 
 export function applyPlanDelta(sessionId: string, delta: PlanDelta): void {
   const db = getDb();
+  const allTasks = getTasksForSession(sessionId);
+  const modifiedDoneTaskIds: string[] = [];
 
   // Re-queue modified tasks — append changes to existing description
   for (const mod of delta.modifiedTasks) {
     const dbId = scopeTaskId(sessionId, mod.id);
-    // Read existing description to append changes rather than overwrite
+    // Read existing task to check status and description
     const existing = db
-      .select({ description: tasksTable.description })
+      .select({ description: tasksTable.description, status: tasksTable.status })
       .from(tasksTable)
       .where(eq(tasksTable.id, dbId))
       .all();
     const existingDesc = existing.length > 0 ? existing[0].description : '';
+    const existingStatus = existing.length > 0 ? existing[0].status : '';
     const updatedDesc = existingDesc
       ? `${existingDesc}\n\n--- Feedback Changes ---\n${mod.changes}`
       : mod.changes;
+
+    // Bug #74: Track done tasks that are being re-queued so we can
+    // cascade to their dependents
+    if (existingStatus === 'done') {
+      modifiedDoneTaskIds.push(dbId);
+    }
 
     db.update(tasksTable)
       .set({
@@ -162,6 +173,30 @@ export function applyPlanDelta(sessionId: string, delta: PlanDelta): void {
       .run();
   }
 
+  // Bug #74: Re-queue downstream dependents of modified done tasks
+  // so they rebuild with the new context
+  if (modifiedDoneTaskIds.length > 0) {
+    for (const task of allTasks) {
+      const deps: string[] = safeJsonParse(task.dependsOn, []);
+      const dependsOnModified = deps.some((depId) => modifiedDoneTaskIds.includes(depId));
+      if (dependsOnModified && task.status === 'done') {
+        db.update(tasksTable)
+          .set({
+            status: 'queued',
+            reviewVerdict: null,
+            reviewIssues: null,
+            reviewCycles: 0,
+            diffPatch: null,
+            agentOutput: null,
+            branchName: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(tasksTable.id, task.id))
+          .run();
+      }
+    }
+  }
+
   // Insert new tasks with correct order offset
   if (delta.newTasks.length > 0) {
     const existing = getTasksForSession(sessionId);
@@ -175,6 +210,27 @@ export function applyPlanDelta(sessionId: string, delta: PlanDelta): void {
       maxOrder,
     );
   }
+
+  // Bug #58: Validate that all dependsOn IDs reference existing task IDs
+  const allTasksAfterDelta = getTasksForSession(sessionId);
+  const validTaskIds = new Set(allTasksAfterDelta.map((t) => t.id));
+  for (const task of allTasksAfterDelta) {
+    const deps: string[] = safeJsonParse(task.dependsOn, []);
+    const invalidDeps = deps.filter((depId) => !validTaskIds.has(depId));
+    if (invalidDeps.length > 0) {
+      console.warn(
+        `[warn] Task ${task.id} references nonexistent dependsOn IDs: ${invalidDeps.join(', ')}. Removing them.`,
+      );
+      const validDeps = deps.filter((depId) => validTaskIds.has(depId));
+      db.update(tasksTable)
+        .set({
+          dependsOn: JSON.stringify(validDeps),
+          updatedAt: new Date(),
+        })
+        .where(eq(tasksTable.id, task.id))
+        .run();
+    }
+  }
 }
 
 export function createIteration(
@@ -184,27 +240,34 @@ export function createIteration(
 ): number {
   const db = getDb();
 
-  // Get next iteration number
-  const existing = db
-    .select({ iterationNumber: iterations.iterationNumber })
-    .from(iterations)
-    .where(eq(iterations.sessionId, sessionId))
-    .all();
+  // Bug #8: Wrap read + insert in a transaction to prevent concurrent feedback
+  // from creating duplicate iteration numbers
+  const sqlite = (db as unknown as { $client: import('better-sqlite3').Database }).$client;
+  let nextNumber = 0;
 
-  const nextNumber =
-    existing.length > 0 ? Math.max(...existing.map((i) => i.iterationNumber)) + 1 : 1;
+  sqlite.transaction(() => {
+    // Get next iteration number
+    const existing = db
+      .select({ iterationNumber: iterations.iterationNumber })
+      .from(iterations)
+      .where(eq(iterations.sessionId, sessionId))
+      .all();
 
-  db.insert(iterations)
-    .values({
-      id: nanoid(),
-      sessionId,
-      iterationNumber: nextNumber,
-      feedback: feedbackText,
-      planDelta: planDelta ? JSON.stringify(planDelta) : null,
-      status: 'building',
-      createdAt: new Date(),
-    })
-    .run();
+    nextNumber =
+      existing.length > 0 ? Math.max(...existing.map((i) => i.iterationNumber)) + 1 : 1;
+
+    db.insert(iterations)
+      .values({
+        id: nanoid(),
+        sessionId,
+        iterationNumber: nextNumber,
+        feedback: feedbackText,
+        planDelta: planDelta ? JSON.stringify(planDelta) : null,
+        status: 'building',
+        createdAt: new Date(),
+      })
+      .run();
+  })();
 
   return nextNumber;
 }
@@ -230,7 +293,15 @@ export function getIterationHistory(sessionId: string) {
  */
 export function requeueIncompleteTasks(sessionId: string): void {
   const db = getDb();
-  const requeableStatuses = new Set(['failed', 'blocked', 'running', 'reviewing', 'fixing']);
+  // Bug #49: Include 'queued' so tasks stuck in queued state are also recovered
+  const requeableStatuses = new Set([
+    'failed',
+    'blocked',
+    'running',
+    'reviewing',
+    'fixing',
+    'queued',
+  ]);
   const remainingTasks = getTasksForSession(sessionId);
   const session = getSession(sessionId);
   const repoPath = session?.repoLocalPath;
@@ -296,6 +367,15 @@ export async function handleFeedback(
   // and just re-run the orchestrator directly
   const allQueued = allTasks.length > 0 && allTasks.every((t) => t.status === 'queued');
 
+  // Bug #18: Save log content before clearing so we can restore on failure
+  const logPath = getLogPath(sessionId);
+  let savedLogContent = '';
+  try {
+    savedLogContent = readFileSync(logPath, 'utf-8');
+  } catch {
+    // Log file may not exist yet — that's fine
+  }
+
   // Clear log file so watchers from other processes start fresh
   clearLog(sessionId);
 
@@ -337,9 +417,23 @@ export async function handleFeedback(
       writeEvent(sessionId, { type: 'agent-end', id: plannerId, success: true });
     } catch (plannerErr) {
       writeEvent(sessionId, { type: 'agent-end', id: plannerId, success: false });
-      // Restore session to awaiting_feedback so the user can retry
+
+      // Bug #18: Restore the log content on planner failure
       try {
-        transition(sessionId, 'awaiting_feedback');
+        writeFileSync(logPath, savedLogContent);
+      } catch {
+        /* best effort restore */
+      }
+
+      // Bug #75: Requeue incomplete tasks even when planner fails
+      requeueIncompleteTasks(sessionId);
+
+      // Bug #67: Only transition back to awaiting_feedback if not already stopped
+      try {
+        const currentSession = getSession(sessionId);
+        if (currentSession?.status !== 'stopped') {
+          transition(sessionId, 'awaiting_feedback');
+        }
       } catch {
         /* may already be transitioned */
       }
@@ -349,8 +443,19 @@ export async function handleFeedback(
     // Parse the plan delta
     const delta = parsePlanDelta(result.output);
 
-    // Track iteration
-    const iterNum = createIteration(sessionId, feedbackText, delta);
+    // Bug #50: Check if the delta parse was successful (has actual task changes)
+    // If parse failed (only has fallback summary, no task changes), mark it
+    const deltaParseSucceeded =
+      delta.modifiedTasks.length > 0 ||
+      delta.newTasks.length > 0 ||
+      delta.summary !== 'Could not parse plan delta from agent response.';
+
+    // Track iteration — store delta but flag if parse failed
+    const iterNum = createIteration(
+      sessionId,
+      feedbackText,
+      deltaParseSucceeded ? delta : { ...delta, summary: `[PARSE_FAILED] ${delta.summary}` },
+    );
 
     addMessage(
       sessionId,
@@ -358,8 +463,10 @@ export async function handleFeedback(
       `Iteration ${iterNum}: ${delta.summary}\nModified: ${delta.modifiedTasks.length} tasks, New: ${delta.newTasks.length} tasks`,
     );
 
-    // Apply delta
-    applyPlanDelta(sessionId, delta);
+    // Only apply delta if parse was successful — a corrupted delta has no changes to apply
+    if (deltaParseSucceeded) {
+      applyPlanDelta(sessionId, delta);
+    }
   } else {
     addMessage(sessionId, 'system', 'Build was interrupted — retrying all tasks...');
     console.log('Build was interrupted — retrying all tasks...\n');
@@ -440,8 +547,14 @@ export async function handleFeedback(
     }
   } catch (err) {
     writeEvent(sessionId, { type: 'build-complete', id: 'build' });
+    // Bug #75: Requeue incomplete tasks even when orchestrator fails
+    requeueIncompleteTasks(sessionId);
+    // Bug #67: Only transition back to awaiting_feedback if not already stopped
     try {
-      transition(sessionId, 'awaiting_feedback');
+      const currentSession = getSession(sessionId);
+      if (currentSession?.status !== 'stopped') {
+        transition(sessionId, 'awaiting_feedback');
+      }
     } catch {
       /* already transitioned */
     }

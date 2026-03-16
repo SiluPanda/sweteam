@@ -224,7 +224,7 @@ export async function deleteSession(id: string): Promise<void> {
   if (session.status === 'building' || session.status === 'iterating') {
     killSessionProcesses(id);
     // Give processes time to terminate before deleting DB rows
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 2000));
   }
 
   // Clean up git branches associated with this session
@@ -254,7 +254,13 @@ export async function deleteSession(id: string): Promise<void> {
     // Log file may not exist
   }
 
-  db.delete(sessions).where(eq(sessions.id, id)).run();
+  try {
+    db.delete(sessions).where(eq(sessions.id, id)).run();
+  } catch {
+    // FK violations can occur if orchestrator is still writing — retry once
+    await new Promise((r) => setTimeout(r, 1000));
+    db.delete(sessions).where(eq(sessions.id, id)).run();
+  }
 }
 
 export function addMessage(
@@ -266,13 +272,22 @@ export function addMessage(
   const db = getDb();
   const id = nanoid();
 
+  let metadataJson: string | null = null;
+  if (metadata) {
+    try {
+      metadataJson = JSON.stringify(metadata);
+    } catch {
+      metadataJson = JSON.stringify({ error: 'metadata serialization failed' });
+    }
+  }
+
   db.insert(messages)
     .values({
       id,
       sessionId,
       role,
       content,
-      metadata: metadata ? JSON.stringify(metadata) : null,
+      metadata: metadataJson,
       createdAt: new Date(),
     })
     .run();

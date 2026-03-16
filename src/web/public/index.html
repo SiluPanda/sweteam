@@ -1051,8 +1051,14 @@ const state = {
 };
 
 // ── API ───────────────────────────────────────────────────
+function apiFetch(url, opts = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(timeout));
+}
+
 async function api(path) {
-  const res = await fetch('/api/' + path);
+  const res = await apiFetch('/api/' + path);
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
@@ -1073,20 +1079,27 @@ async function fetchSessions() {
   }
 }
 
+let selectSessionCounter = 0;
+
 async function selectSession(id, force) {
   if (!force && state.selectedId === id) return;
   state.selectedId = id;
+  const myRequest = ++selectSessionCounter;
   state.session = await api('sessions/' + id);
+  if (state.selectedId !== id || selectSessionCounter !== myRequest) return;
   state.tasks = await api('sessions/' + id + '/tasks');
+  if (state.selectedId !== id || selectSessionCounter !== myRequest) return;
   state.messages = await api('sessions/' + id + '/messages');
+  if (state.selectedId !== id || selectSessionCounter !== myRequest) return;
   state.iterations = await api('sessions/' + id + '/iterations');
+  if (state.selectedId !== id || selectSessionCounter !== myRequest) return;
   renderSessionList();
   renderSessionView();
   renderRightPanel();
 }
 
 async function stopSession(id) {
-  await fetch('/api/sessions/' + id + '/stop', { method: 'POST' });
+  await apiFetch('/api/sessions/' + id + '/stop', { method: 'POST' });
   await fetchSessions();
   if (state.selectedId === id) {
     await selectSession(id, true);
@@ -1187,9 +1200,9 @@ function renderSessionList() {
     return;
   }
 
-  el.innerHTML = state.sessions.map(s => {
+  const newHtml = state.sessions.map(s => {
     const isActive = s.id === state.selectedId;
-    const pct = s.tasksTotal > 0 ? s.tasksDone / s.tasksTotal : 0;
+    const pct = s.tasksTotal > 0 ? Math.min(1, s.tasksDone / s.tasksTotal) : 0;
     const repoShort = s.repo.includes('/') ? s.repo.split('/').pop() : s.repo;
 
     return `<div class="session-card${isActive ? ' active' : ''}" onclick="selectSession('${s.id}')">
@@ -1208,6 +1221,7 @@ function renderSessionList() {
       </div>` : ''}
     </div>`;
   }).join('');
+  if (el.innerHTML !== newHtml) el.innerHTML = newHtml;
 }
 
 // ── Render: Session View (Center) ─────────────────────────
@@ -1284,6 +1298,8 @@ function renderConversation(el) {
     return;
   }
 
+  const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+
   el.innerHTML = state.messages.map(m => {
     const avatarMap = { user: '👤', agent: '🤖', system: '⚙' };
     return `<div class="message fade-in">
@@ -1299,17 +1315,25 @@ function renderConversation(el) {
     </div>`;
   }).join('');
 
-  // Auto-scroll to bottom
-  el.scrollTop = el.scrollHeight;
+  // Auto-scroll only if user is already near the bottom
+  if (isNearBottom) el.scrollTop = el.scrollHeight;
 }
 
 function formatMessageContent(content) {
   if (!content) return '';
   let html = escapeHtml(content);
-  // Basic code block detection
-  html = html.replace(/```([\s\S]*?)```/g, '<pre>$1</pre>');
+  // Extract code blocks into placeholders to protect them from <br> injection
+  const codeBlocks = [];
+  html = html.replace(/```([\s\S]*?)```/g, (_, code) => {
+    codeBlocks.push('<pre>' + code + '</pre>');
+    return '\x00CB' + (codeBlocks.length - 1) + '\x00';
+  });
   // Inline code
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Newlines to <br> only outside code blocks
+  html = html.replace(/\n/g, '<br>');
+  // Restore code blocks
+  html = html.replace(/\x00CB(\d+)\x00/g, (_, i) => codeBlocks[i]);
   return html;
 }
 
@@ -1349,7 +1373,7 @@ function renderTasks(el) {
         <span class="task-title">${escapeHtml(t.title)}</span>
         <span class="task-status-label ${t.status}">${t.status}</span>
       </div>
-      ${t.description ? `<div class="task-description">${escapeHtml(t.description).substring(0, 200)}${t.description.length > 200 ? '...' : ''}</div>` : ''}
+      ${t.description ? `<div class="task-description">${escapeHtml(t.description.substring(0, 200))}${t.description.length > 200 ? '...' : ''}</div>` : ''}
       ${filesHtml}
       ${reviewHtml}
     </div>`;
@@ -1502,10 +1526,13 @@ document.getElementById('refresh-btn').addEventListener('click', () => fetchSess
 
 // ── Polling ───────────────────────────────────────────────
 let pollInterval;
+let polling = false;
 
 async function startPolling() {
   await fetchSessions();
   pollInterval = setInterval(async () => {
+    if (polling) return;
+    polling = true;
     try {
       await fetchSessions();
       // Refresh selected session data if it's active
@@ -1524,6 +1551,8 @@ async function startPolling() {
       }
     } catch (e) {
       console.warn('Poll error:', e);
+    } finally {
+      polling = false;
     }
   }, 2500);
 }

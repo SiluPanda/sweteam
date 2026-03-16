@@ -118,7 +118,7 @@ describe('image support — session handlers', () => {
       const actual = await vi.importActual<typeof import('fs')>('fs');
       return {
         ...actual,
-        existsSync: (p: string) => (p.startsWith('/path/to/') ? true : actual.existsSync(p)),
+        existsSync: (p: string) => (p.startsWith('/tmp/') ? true : actual.existsSync(p)),
       };
     });
 
@@ -188,9 +188,9 @@ describe('image support — session handlers', () => {
 
     const handlers = createSessionHandlers('s_img', 'owner/repo', 'test', '/tmp');
 
-    // Add images
+    // Add images (paths must be under repoPath /tmp)
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    handlers.onImage(['/path/to/img1.png', '/path/to/img2.jpg']);
+    handlers.onImage(['/tmp/img1.png', '/tmp/img2.jpg']);
     expect(consoleSpy).toHaveBeenCalledWith('2 image(s) attached to session.');
 
     // List images
@@ -217,7 +217,7 @@ describe('image support — session handlers', () => {
       const actual = await vi.importActual<typeof import('fs')>('fs');
       return {
         ...actual,
-        existsSync: (p: string) => (p.startsWith('/path/to/') ? true : actual.existsSync(p)),
+        existsSync: (p: string) => (p.startsWith('/tmp/') ? true : actual.existsSync(p)),
       };
     });
 
@@ -280,8 +280,8 @@ describe('image support — session handlers', () => {
     const handlers = createSessionHandlers('s_cmd', 'owner/repo', 'test', '/tmp');
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    // Test @image command dispatch
-    await handleSessionCommand('@image /path/to/file.png', handlers);
+    // Test @image command dispatch (path must be under repoPath /tmp)
+    await handleSessionCommand('@image /tmp/file.png', handlers);
     expect(consoleSpy).toHaveBeenCalledWith('1 image(s) attached to session.');
 
     // Test @images list dispatch
@@ -303,7 +303,7 @@ describe('image support — session handlers', () => {
       const actual = await vi.importActual<typeof import('fs')>('fs');
       return {
         ...actual,
-        existsSync: (p: string) => (p.startsWith('/path/to/') ? true : actual.existsSync(p)),
+        existsSync: (p: string) => (p.startsWith('/tmp/') ? true : actual.existsSync(p)),
       };
     });
 
@@ -358,15 +358,15 @@ describe('image support — session handlers', () => {
     const handlers = createSessionHandlers('s_dedup', 'owner/repo', 'test', '/tmp');
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    handlers.onImage(['/path/to/img.png']);
+    handlers.onImage(['/tmp/img.png']);
     expect(consoleSpy).toHaveBeenCalledWith('1 image(s) attached to session.');
 
     consoleSpy.mockClear();
-    handlers.onImage(['/path/to/img.png']); // duplicate
+    handlers.onImage(['/tmp/img.png']); // duplicate
     expect(consoleSpy).toHaveBeenCalledWith('1 image(s) attached to session.');
 
     consoleSpy.mockClear();
-    handlers.onImage(['/path/to/other.png']);
+    handlers.onImage(['/tmp/other.png']);
     expect(consoleSpy).toHaveBeenCalledWith('2 image(s) attached to session.');
 
     consoleSpy.mockRestore();

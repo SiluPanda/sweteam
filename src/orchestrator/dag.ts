@@ -12,7 +12,7 @@ export function safeJsonParse<T>(json: string | null | undefined, fallback: T): 
   try {
     return JSON.parse(json) as T;
   } catch {
-    console.log(`[warn] Failed to parse JSON, using fallback: ${json.slice(0, 200)}`);
+    console.warn(`[warn] Failed to parse dependsOn JSON, using fallback. Corrupted value: ${json.slice(0, 200)}`);
     return fallback;
   }
 }

@@ -49,14 +49,17 @@ export function detectInputPrompt(recentOutput: string): boolean {
   // Skip if the last line is clearly not a prompt
   if (!lastLine || lastLine.trim().length === 0) return false;
 
+  // Trim leading whitespace before testing patterns to avoid false negatives
+  const testLine = lastLine.trim();
+
   // Check false positives on the last line
   for (const fp of FALSE_POSITIVE_PATTERNS) {
-    if (fp.test(lastLine)) return false;
+    if (fp.test(testLine)) return false;
   }
 
   // Check if it matches a prompt pattern
   for (const pattern of PROMPT_PATTERNS) {
-    if (pattern.test(lastLine)) return true;
+    if (pattern.test(testLine)) return true;
   }
 
   return false;

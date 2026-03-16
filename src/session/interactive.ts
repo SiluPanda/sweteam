@@ -1,4 +1,5 @@
 import { existsSync } from 'fs';
+import { resolve as pathResolve } from 'path';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
 import { sessions } from '../db/schema.js';
@@ -128,7 +129,9 @@ export function createSessionHandlers(
               const msg = err instanceof Error ? err.message : String(err);
               addMessage(sessionId, 'system', `Feedback failed: ${msg}`);
             } catch (innerErr) {
-              console.error('Error in error handler:', innerErr);
+              const innerMsg = innerErr instanceof Error ? innerErr.message : String(innerErr);
+              const origMsg = err instanceof Error ? err.message : String(err);
+              console.error('Failed to log error to DB:', innerMsg, '| Original error:', origMsg);
             }
           },
         );
@@ -204,7 +207,9 @@ export function createSessionHandlers(
 
             writeEvent(sessionId, { type: 'phase-complete', id: plannerId });
           } catch (innerErr) {
-            console.error('Error in error handler:', innerErr);
+            const innerMsg = innerErr instanceof Error ? innerErr.message : String(innerErr);
+            const origMsg = err instanceof Error ? err.message : String(err);
+            console.error('Failed to log error to DB:', innerMsg, '| Original error:', origMsg);
           }
         })
         .finally(() => {
@@ -276,7 +281,9 @@ export function createSessionHandlers(
               /* already transitioned */
             }
           } catch (innerErr) {
-            console.error('Error in error handler:', innerErr);
+            const innerMsg = innerErr instanceof Error ? innerErr.message : String(innerErr);
+            const origMsg = err instanceof Error ? err.message : String(err);
+            console.error('Failed to log error to DB:', innerMsg, '| Original error:', origMsg);
           }
         })
         .finally(() => {
@@ -289,6 +296,8 @@ export function createSessionHandlers(
 
     onStop: async (): Promise<void> => {
       buildInProgress = false;
+      planningInProgress = false;
+      plannerStates.delete(sessionId);
       stopSession(sessionId);
       console.log(`\nSession ${sessionId} stopped.\n`);
     },
@@ -319,7 +328,9 @@ export function createSessionHandlers(
             console.error(`Feedback processing failed: ${msg}`);
             addMessage(sessionId, 'system', `Feedback failed: ${msg}`);
           } catch (innerErr) {
-            console.error('Error in error handler:', innerErr);
+            const innerMsg = innerErr instanceof Error ? innerErr.message : String(innerErr);
+            const origMsg = err instanceof Error ? err.message : String(err);
+            console.error('Failed to log error to DB:', innerMsg, '| Original error:', origMsg);
           }
         },
       );
@@ -406,7 +417,9 @@ export function createSessionHandlers(
             addMessage(sessionId, 'agent', errResponse, { phase: 'ask' });
             writeEvent(sessionId, { type: 'phase-complete', id: askId });
           } catch (innerErr) {
-            console.error('Error in error handler:', innerErr);
+            const innerMsg = innerErr instanceof Error ? innerErr.message : String(innerErr);
+            const origMsg = err instanceof Error ? err.message : String(err);
+            console.error('Failed to log error to DB:', innerMsg, '| Original error:', origMsg);
           }
         });
 
@@ -431,14 +444,21 @@ export function createSessionHandlers(
     },
 
     onImage: (paths: string[]): void => {
+      const allowedBase = pathResolve(repoPath);
+      const cwdBase = pathResolve(process.cwd());
       for (const p of paths) {
-        if (!existsSync(p)) {
+        const resolved = pathResolve(p);
+        if (!resolved.startsWith(allowedBase) && !resolved.startsWith(cwdBase)) {
+          console.log(`Image path rejected (outside repo/cwd): ${p}`);
+          continue;
+        }
+        if (!existsSync(resolved)) {
           addMessage(sessionId, 'system', `Image file not found: ${p}`);
           console.log(`Image file not found: ${p}`);
           continue;
         }
-        if (!sessionImages.includes(p)) {
-          sessionImages.push(p);
+        if (!sessionImages.includes(resolved)) {
+          sessionImages.push(resolved);
         }
       }
       console.log(`${sessionImages.length} image(s) attached to session.`);
@@ -497,11 +517,21 @@ export async function handleSessionCommand(
   } else if (trimmed === '@ask') {
     console.log('Usage: @ask <your question>');
   } else if (trimmed.startsWith('@ask ')) {
-    await handlers.onAsk(trimmed.slice('@ask '.length));
+    const askText = trimmed.slice('@ask '.length).trim();
+    if (!askText) {
+      console.log('Please provide text after @ask');
+    } else {
+      await handlers.onAsk(askText);
+    }
   } else if (trimmed === '@feedback') {
     console.log('Usage: @feedback <your feedback text>');
   } else if (trimmed.startsWith('@feedback ')) {
-    await handlers.onFeedback(trimmed.slice('@feedback '.length));
+    const feedbackText = trimmed.slice('@feedback '.length).trim();
+    if (!feedbackText) {
+      console.log('Please provide text after @feedback');
+    } else {
+      await handlers.onFeedback(feedbackText);
+    }
   } else if (trimmed === '@image' || trimmed === '@images') {
     handlers.onImagesList();
   } else if (trimmed === '@images clear') {
@@ -509,7 +539,7 @@ export async function handleSessionCommand(
   } else if (trimmed.startsWith('@image ')) {
     const imagePath = trimmed.slice('@image '.length).trim();
     // Remove surrounding quotes if present
-    const cleanPath = imagePath.replace(/^["']|["']$/g, '');
+    const cleanPath = imagePath.replace(/^["']|["']$/g, '').trim();
     handlers.onImage([cleanPath]);
   } else {
     console.log(`Unknown command: ${trimmed}. Type @help for session commands.`);

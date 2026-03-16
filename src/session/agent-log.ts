@@ -89,6 +89,10 @@ export function watchLog(sessionId: string, onEvent: (event: AgentEvent) => void
     try {
       if (!existsSync(logPath)) return;
       const stat = statSync(logPath);
+      if (stat.size < offset) {
+        // File was truncated (e.g. clearLog), reset offset to read from start
+        offset = 0;
+      }
       if (stat.size <= offset) return;
 
       const content = readFileSync(logPath, 'utf-8');

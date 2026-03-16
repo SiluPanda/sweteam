@@ -139,23 +139,31 @@ export async function handleBuild(
     return;
   }
 
-  // Save plan JSON to session
-  db.update(sessions)
-    .set({
-      planJson: JSON.stringify(plan),
-      updatedAt: new Date(),
-    })
-    .where(eq(sessions.id, sessionId))
-    .run();
+  // Atomically: save plan, delete old tasks, insert new tasks, then transition.
+  // All four operations are wrapped in a single transaction so a mid-way failure
+  // does not leave the session in a bricked state (Bug #2).
+  // Tasks are inserted BEFORE the state transition so a failure in insertTasksFromPlan
+  // does not leave the session stuck in 'building' with zero tasks (Bug #3).
+  const sqlite = (db as unknown as { $client: import('better-sqlite3').Database }).$client;
+  sqlite.transaction(() => {
+    // Save plan JSON to session
+    db.update(sessions)
+      .set({
+        planJson: JSON.stringify(plan),
+        updatedAt: new Date(),
+      })
+      .where(eq(sessions.id, sessionId))
+      .run();
 
-  // Transition to building
-  transition(sessionId, 'building');
+    // Clean up all tasks from previous builds — the entire plan is re-inserted
+    db.delete(tasksTable).where(eq(tasksTable.sessionId, sessionId)).run();
 
-  // Clean up all tasks from previous builds — the entire plan is re-inserted
-  db.delete(tasksTable).where(eq(tasksTable.sessionId, sessionId)).run();
+    // Insert tasks into DB (before state transition)
+    insertTasksFromPlan(sessionId, plan.tasks);
 
-  // Insert tasks into DB
-  insertTasksFromPlan(sessionId, plan.tasks);
+    // Transition to building (after tasks are safely inserted)
+    transition(sessionId, 'building');
+  })();
 
   addMessage(
     sessionId,
@@ -173,8 +181,18 @@ export async function handleBuild(
 
   // Run the orchestrator
   const session = getSession(sessionId)!;
-  const repoPath = session.repoLocalPath!;
-  const sessionBranch = session.workingBranch!;
+  if (!session.repoLocalPath) {
+    throw new Error(
+      `Session ${sessionId} is missing repoLocalPath. Was the repository cloned successfully?`,
+    );
+  }
+  if (!session.workingBranch) {
+    throw new Error(
+      `Session ${sessionId} is missing workingBranch. Was the session branch created successfully?`,
+    );
+  }
+  const repoPath = session.repoLocalPath;
+  const sessionBranch = session.workingBranch;
 
   // Ensure we're on the session branch before cleanup (prevents it from being deleted)
   const currentBranch = git(['rev-parse', '--abbrev-ref', 'HEAD'], repoPath);

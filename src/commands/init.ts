@@ -21,6 +21,9 @@ export function runInit(
   const clis = discoverClis();
   const agents = getDiscoveredAgents(clis);
 
+  if (Object.keys(agents).length === 0) {
+    console.warn("No coding CLIs detected. Using 'claude-code' as default.");
+  }
   const firstAgent = Object.keys(agents)[0] || 'claude-code';
 
   const config: SweteamConfig = {

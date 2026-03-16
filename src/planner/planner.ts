@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process';
-import { readdirSync, readFileSync, statSync, existsSync } from 'fs';
+import { readdirSync, readFileSync, statSync, lstatSync, existsSync } from 'fs';
 import { join } from 'path';
 import { resolveAdapter } from '../adapters/adapter.js';
 import { loadConfig } from '../config/loader.js';
@@ -53,10 +53,13 @@ export function getFilteredFileTree(
     const fullPath = join(dir, entry);
     let stat;
     try {
-      stat = statSync(fullPath);
+      stat = lstatSync(fullPath);
     } catch {
       continue;
     }
+
+    // Skip symlinks to avoid following them into unexpected locations
+    if (stat.isSymbolicLink()) continue;
 
     if (stat.isDirectory()) {
       lines.push(`${prefix}${entry}/`);
@@ -70,11 +73,17 @@ export function getFilteredFileTree(
 }
 
 export function getManifestContents(repoPath: string): string | null {
+  const MAX_MANIFEST_SIZE = 100 * 1024; // 100KB
   for (const manifest of MANIFEST_FILES) {
     const filePath = join(repoPath, manifest);
     if (existsSync(filePath)) {
       try {
-        return readFileSync(filePath, 'utf-8');
+        const fileSize = statSync(filePath).size;
+        const content = readFileSync(filePath, 'utf-8');
+        if (fileSize > MAX_MANIFEST_SIZE) {
+          return content.slice(0, MAX_MANIFEST_SIZE) + '\n(truncated)';
+        }
+        return content;
       } catch {
         continue;
       }

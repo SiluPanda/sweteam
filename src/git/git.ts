@@ -168,6 +168,15 @@ export function getStagedDiff(cwd: string): string {
 
 export function commitAll(message: string, cwd: string): void {
   git(['add', '-A'], cwd);
+  // Check if there are staged changes before committing.
+  // `git diff --cached --quiet` exits 0 if nothing staged, non-zero if there are changes.
+  try {
+    git(['diff', '--cached', '--quiet'], cwd);
+    // Exit code 0 means nothing staged — return early
+    return;
+  } catch {
+    // Non-zero exit means there ARE staged changes — proceed with commit
+  }
   git(['commit', '-m', message], cwd);
 }
 
@@ -293,9 +302,10 @@ export function addWorktree(
     /* doesn't exist */
   }
 
-  mkdirSync(worktreePath, { recursive: true });
-  // Remove the directory so git worktree add can create it fresh
-  rmSync(worktreePath, { recursive: true, force: true });
+  // Ensure the path is clear for git worktree add (it creates the directory itself)
+  if (existsSync(worktreePath)) {
+    rmSync(worktreePath, { recursive: true, force: true });
+  }
 
   git(['worktree', 'add', '-b', branchName, worktreePath, baseBranch], cwd);
 }
@@ -311,6 +321,14 @@ export function removeWorktree(worktreePath: string, cwd: string): void {
     git(['worktree', 'prune'], cwd);
   } catch {
     // Best effort
+  }
+  // Verify removal — if directory still exists, try rmSync as fallback
+  if (existsSync(worktreePath)) {
+    try {
+      rmSync(worktreePath, { recursive: true, force: true });
+    } catch {
+      console.warn(`[warn] Could not remove worktree directory: ${worktreePath}`);
+    }
   }
 }
 
